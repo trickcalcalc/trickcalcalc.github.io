@@ -15,6 +15,7 @@ H. 입력 검증         : numericErrors, showErrors
 I. 견적 출력과 복사  : calcPlan, copyPlanResult, QUANTILES, copyText
 J. 사후 운 평가      : gradeFor, fillSection, calcReview
 K. 이벤트 연결       : 입력 변경 시 실행할 함수
+L. 클론 팩토리 계산기 : CF_PRESETS, cloneDistribution, calcClone, copyCloneResult
 
 [계산 조건]
 - 뽑기 1회마다 신앙심 1Pt를 얻고, 엘다인은 300Pt / 일반 사도는 200Pt로 1개를 교환합니다.
@@ -24,6 +25,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 - 달성선 횟수는 1회 단위, 세트 수는 올림하여 표시합니다.
 - 보유 모집권의 마지막 1-9회는 단챠로 계산합니다.
 - 평균 필요 횟수는 실제 10연차 단위 소모량의 기댓값입니다.
+- 클론 팩토리는 1일 8회, 회당 교단증명서 1장(3성 50% / 3명 균등 = 1/6) 및 이벤트 당일 포함 기준으로 계산합니다.
 
 [수정 시 확인]
 - HTML의 id를 변경하면 JavaScript의 참조도 함께 바꿔야 합니다.
@@ -277,7 +279,8 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       font-weight: 600;
     }
 
-    input[type="number"] {
+    input[type="number"],
+    input[type="date"] {
       width: 100%;
       padding: 10px 12px;
       border: 1px solid var(--border);
@@ -285,7 +288,15 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       background: var(--bg);
       color: var(--text);
       font-size: 1rem;
+      font-family: inherit;
+    }
+
+    input[type="number"] {
       -moz-appearance: textfield;
+    }
+
+    input[type="date"] {
+      color-scheme: light dark;
     }
 
     input[type="number"]::-webkit-inner-spin-button,
@@ -458,6 +469,33 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       padding: 8px 10px;
     }
 
+    .stat.stat-wide {
+      grid-column: 1 / -1;
+    }
+
+    .cf-period-bar {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      font-size: .78rem;
+      color: var(--sub);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .cf-period-bar strong {
+      color: var(--text);
+    }
+
+    .cf-over {
+      color: var(--error);
+      font-weight: 600;
+    }
+
     .stat .k {
       font-size: .68rem;
       color: var(--sub);
@@ -597,7 +635,8 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       }
 
       #tab-plan.active,
-      #tab-review.active {
+      #tab-review.active,
+      .tool-grid {
         display: grid;
         grid-template-columns: 1fr 1.05fr;
         gap: 16px;
@@ -619,6 +658,9 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     <nav class="tool-nav" id="toolNav" aria-label="계산기 메뉴">
       <button type="button" class="tool-btn active" data-tool="pickup" onclick="switchTool('pickup')">
         사도 픽업 계산기
+      </button>
+      <button type="button" class="tool-btn" data-tool="clone" onclick="switchTool('clone')">
+        클론 팩토리 계산기
       </button>
     </nav>
 
@@ -895,11 +937,126 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     </div>
     </section>
 
+    <!-- [하위 분류 2] 클론 팩토리 계산기 -->
+    <section id="tool-clone" class="tool-view" aria-label="클론 팩토리 계산기">
+      <h2 class="tool-title">클론 팩토리 계산기</h2>
+      <p class="desc">교단증명서 획득 기댓값 &amp; 목표 달성 일수 계산기</p>
+
+      <div class="tool-grid">
+        <div class="card">
+          <div id="cfPresetWrap" hidden>
+            <label>목표 프리셋</label>
+            <div class="preset-grid" id="cfPresetGrid"></div>
+          </div>
+
+          <div class="field">
+            <label for="cfTarget">
+              목표 교단증명서 수량
+              <span class="sub-label">(특정 3성 1명 기준)</span>
+            </label>
+            <input
+              type="number" id="cfTarget" value="20"
+              min="0" step="1" placeholder="예: 20" inputmode="numeric"
+            >
+          </div>
+
+          <div class="field">
+            <label for="cfOwned">
+              현재 보유 교단증명서
+              <span class="sub-label">(선택, 미입력 시 0)</span>
+            </label>
+            <input
+              type="number" id="cfOwned" value="0"
+              min="0" step="1" placeholder="예: 0" inputmode="numeric"
+            >
+          </div>
+
+          <div class="field">
+            <label for="cfEndDate">
+              로테이션 변경일
+              <span class="sub-label" id="cfEndDateLabel">(3.25주년 예정 · 당일 포함)</span>
+            </label>
+            <input type="date" id="cfEndDate">
+            <label class="check-label">
+              <input type="checkbox" id="cfTodayDone">
+              오늘 클론 팩토리를 이미 완료함
+            </label>
+          </div>
+
+          <div class="cf-period-bar" id="cfPeriodBar"></div>
+
+          <p class="note">
+            ※ 이벤트 당일 오전 11시 점검 전까지는 로테이션이 유지되므로 변경일 당일까지 포함해 계산합니다.
+          </p>
+          <div id="cloneError" class="error-box" role="alert" hidden></div>
+        </div>
+
+        <div class="card result-card" id="cfResultCard">
+          <div class="result-section">
+            <div class="rs-title">
+              <span class="dot" style="background:#2c5aa0"></span>
+              클론 팩토리 견적 요약
+            </div>
+
+            <div class="stat-grid">
+              <div class="stat stat-wide">
+                <div class="k" id="cfExpectedLabel">로테이션 전 예상 획득</div>
+                <div class="v" id="cfExpected">-</div>
+              </div>
+              <div class="stat">
+                <div class="k">목표 평균 소요</div>
+                <div class="v" id="cfMeanDays">-</div>
+              </div>
+              <div class="stat">
+                <div class="k">중앙값 (50% 달성선)</div>
+                <div class="v" id="cfMedianDays">-</div>
+              </div>
+            </div>
+
+            <div class="my-prob-box" id="cfProbBox">
+              <div>
+                <div class="title">🎯 로테이션 전 목표 달성 확률</div>
+                <div class="sub" id="cfProbSub"></div>
+              </div>
+              <div class="val" id="cfProbVal">-</div>
+            </div>
+          </div>
+
+          <div class="result-section">
+            <div class="rs-title">
+              <span class="dot" style="background:#27ae60"></span>
+              운의 편차별 필요 일수
+            </div>
+
+            <table class="pct-table">
+              <thead>
+                <tr>
+                  <th>구분</th>
+                  <th>필요 일수</th>
+                  <th>예상 완료일</th>
+                </tr>
+              </thead>
+              <tbody id="cfPctTableBody"></tbody>
+            </table>
+
+            <button type="button" class="btn-copy" onclick="copyCloneResult()">
+              📋 결과 텍스트 복사
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- 하단 안내 및 방문자 배지 -->
     <div class="footer" id="footerPickup">
       <span id="footerRates">* 픽업 0.6% / 일반 3성 2.4% / 전체 3성 3.0%</span><br>
       <span id="footerStrategy">* 공유 신앙심 반영 / A 우선 전략 / 보유 자원은 마지막 단챠 포함</span><br>
       * 사후 운 평가는 해당 획득 수 이상을 얻을 확률입니다.
+    </div>
+    <div class="footer" id="footerClone" hidden>
+      * 1일 8회 제한 / 회당 교단증명서 1장 / 3성 50% (3명 균등 = 16.67%)<br>
+      * 미완료 기준 오늘~변경일 당일까지 포함 (완료 체크 시 내일부터 합산)<br>
+      * 일수별 달성선은 매일 8회씩 진행하는 단위 기준으로 계산합니다.
     </div>
     <div style="text-align:center;margin-top:12px">
       <img
@@ -1014,6 +1171,8 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       document.querySelectorAll(".tool-view").forEach((view) => {
         view.classList.toggle("active", view.id === "tool-" + toolId);
       });
+      $("footerPickup").hidden = toolId !== "pickup";
+      $("footerClone").hidden = toolId !== "clone";
     }
 
     // 탭 버튼 강조와 실제 화면을 함께 전환합니다.
@@ -1590,15 +1749,19 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       pulls: "전체 가챠 횟수",
       eldine: "엘다인 획득 수",
       general: "일반 3성 획득 수",
-      total3: "전체 3성 획득 수"
+      total3: "전체 3성 획득 수",
+      cfTarget: "목표 교단증명서",
+      cfOwned: "현재 보유 교단증명서",
+      cfEndDate: "로테이션 변경일"
     };
 
     const GROUP_IDS = {
       plan: ["planFaith", "planTickets", "planA", "planB"],
-      review: ["pulls", "eldine", "general", "total3"]
+      review: ["pulls", "eldine", "general", "total3"],
+      clone: ["cfTarget", "cfOwned", "cfEndDate"]
     };
 
-    const lastAlert = { plan: "", review: "" };
+    const lastAlert = { plan: "", review: "", clone: "" };
 
     // 음수, 소수, 비정상 입력 및 안전한 정수 범위를 벗어난 값을 거부합니다.
     function numericErrors(ids) {
@@ -2072,8 +2235,369 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       calcReview(true);
     });
 
-    // 첫 화면은 엘다인(0.6% · 300Pt) 기본 프리셋으로 초기화합니다.
+    /* ==================================================
+       L. 클론 팩토리 계산기
+       일일 8회, 3성 확률 50%(3명 균등 = 1/6) 기준
+       ================================================== */
+
+    const CF_DAILY_RUNS = 8;
+    const CF_P = 0.5 / 3;
+    const CF_ANCHOR_UTC = Date.UTC(2026, 8, 24); // 2026.09.24(목) 기준 격주 주기
+    const CF_DAY_MS = 86400000;
+
+    // [목표 수량, 버튼 문구, 기본 선택 여부]
+    // 3성→4성 25장, 4성→5성(A1) 50장, A1→A2 40장, A2→A3 60장, 명함 20장(배포 시 10장)
+    const CF_PRESETS = [
+      [10, "명함<br>(10장)"],
+      [20, "명함<br>(20장)", 1],
+      [75, "3성 → 5성(A1)<br>(75장)"],
+      [135, "명함 → A2<br>(135장)"],
+      [115, "3성 → A2<br>(115장)"],
+      [60, "A2 → A3<br>(60장)"]
+    ];
+
+    let defaultCloneRotation = null;
+    let lastClone = null;
+
+    function getNowKst() {
+      const kst = new Date(Date.now() + 9 * 3600000);
+      const iso = kst.toISOString().slice(0, 10);
+      const hour = kst.getUTCHours();
+      return { iso, hour, key: `${iso}:${hour >= 11 ? 1 : 0}` };
+    }
+
+    // 업데이트 당일 오전 11시(점검) 전까지만 해당 로테이션을 현재 회차로 유지합니다.
+    function isRotationActive(nowKst, rotIso) {
+      return nowKst.iso < rotIso || (nowKst.iso === rotIso && nowKst.hour < 11);
+    }
+
+    function parseIsoUtc(iso) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+      if (!m) return null;
+      const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+      const ms = Date.UTC(y, mo - 1, d);
+      const dt = new Date(ms);
+      if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) {
+        return null;
+      }
+      return ms;
+    }
+
+    function msToIso(ms) {
+      return new Date(ms).toISOString().slice(0, 10);
+    }
+
+    function addIsoDays(iso, days) {
+      return msToIso(parseIsoUtc(iso) + days * CF_DAY_MS);
+    }
+
+    function diffIsoDays(aIso, bIso) {
+      return Math.round((parseIsoUtc(bIso) - parseIsoUtc(aIso)) / CF_DAY_MS);
+    }
+
+    function formatIsoDots(iso) {
+      return iso.replaceAll("-", ".");
+    }
+
+    function formatShortIso(iso) {
+      return iso.slice(2).replaceAll("-", ".");
+    }
+
+    // 2026.09.24 기준 격주 목요일 중 목표일에 가장 가까운 로테이션 일자를 찾습니다.
+    function nearestBiweeklyThu(targetMs) {
+      const step = 14 * CF_DAY_MS;
+      const idx = Math.round((targetMs - CF_ANCHOR_UTC) / step);
+      return msToIso(CF_ANCHOR_UTC + idx * step);
+    }
+
+    function getDefaultCloneRotation(nowKst) {
+      if (isRotationActive(nowKst, "2026-12-31")) {
+        return { label: "3.25주년 예정 · 당일 포함", date: "2026-12-31" };
+      }
+      if (isRotationActive(nowKst, "2027-03-25")) {
+        return { label: "3.5주년 예정 · 당일 포함", date: "2027-03-25" };
+      }
+
+      const startYear = Number(nowKst.iso.slice(0, 4));
+      const quarters = [
+        [3, 27, ".5"],
+        [6, 27, ".75"],
+        [9, 27, ""],
+        [12, 27, ".25"]
+      ];
+
+      for (let y = startYear; y <= startYear + 2; y++) {
+        for (const [mo, day, suffix] of quarters) {
+          const candIso = nearestBiweeklyThu(Date.UTC(y, mo - 1, day));
+          if (isRotationActive(nowKst, candIso)) {
+            const anniv = (mo >= 9 ? y - 2023 : y - 2024) + suffix;
+            return { label: `${anniv}주년 예정 · 당일 포함`, date: candIso };
+          }
+        }
+      }
+
+      return { label: "당일 포함", date: nowKst.iso };
+    }
+
+    function renderCfPresets() {
+      const wrap = $("cfPresetWrap");
+      const grid = $("cfPresetGrid");
+      grid.innerHTML = "";
+
+      if (!CF_PRESETS.length) {
+        wrap.hidden = true;
+        return;
+      }
+
+      wrap.hidden = false;
+      for (const [target, label, on] of CF_PRESETS) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn-preset" + (on ? " active" : "");
+        btn.innerHTML = label;
+        btn.onclick = () => setCfPreset(target, btn);
+        grid.appendChild(btn);
+        if (on) $("cfTarget").value = target;
+      }
+
+      const custom = document.createElement("button");
+      custom.type = "button";
+      custom.className = "btn-preset btn-custom-row";
+      custom.id = "cfBtnCustom";
+      custom.textContent = "✏️ 직접 입력 (자유 선택)";
+      custom.onclick = () => {
+        setCfCustom();
+        $("cfTarget").focus();
+        $("cfTarget").select();
+      };
+      grid.appendChild(custom);
+    }
+
+    function setCfCustom() {
+      document.querySelectorAll("#cfPresetGrid .btn-preset").forEach((x) => {
+        x.classList.remove("active");
+      });
+      const btn = $("cfBtnCustom");
+      if (btn) btn.classList.add("active");
+    }
+
+    function setCfPreset(target, btn) {
+      document.querySelectorAll("#cfPresetGrid .btn-preset").forEach((x) => {
+        x.classList.remove("active");
+      });
+      btn.classList.add("active");
+      $("cfTarget").value = target;
+      calcClone();
+    }
+
+    // 하루 8회씩 진행할 때 추가 필요 수량(need) 달성 일수 분포를 계산합니다.
+    function cloneDistribution(need) {
+      if (need <= 0) {
+        return {
+          meanDays: 0,
+          quantiles: QUANTILES.map(([label, , hl]) => ({ label, hl, days: 0 }))
+        };
+      }
+
+      const quantiles = QUANTILES.map(([label, p, hl]) => ({
+        label,
+        p,
+        hl,
+        days: null
+      }));
+
+      let meanDays = 0;
+      let nextIdx = 0;
+      const maxDays = 10000;
+
+      for (let d = 0; d <= maxDays; d++) {
+        const cdf = binomSurvival(d * CF_DAILY_RUNS, need, CF_P);
+        meanDays += 1 - cdf;
+
+        while (nextIdx < quantiles.length && cdf >= quantiles[nextIdx].p) {
+          quantiles[nextIdx].days = d;
+          nextIdx++;
+        }
+
+        if (nextIdx >= quantiles.length && 1 - cdf < 1e-12) {
+          break;
+        }
+      }
+
+      for (const q of quantiles) {
+        if (q.days === null) q.days = maxDays;
+      }
+
+      return { meanDays, quantiles };
+    }
+
+    function calcClone(popup = false) {
+      const errors = numericErrors(["cfTarget", "cfOwned"]);
+      const target = int("cfTarget");
+      const owned = int("cfOwned");
+      let endIso = $("cfEndDate").value;
+      const endMs = parseIsoUtc(endIso);
+
+      if (endMs === null) {
+        errors.push(["cfEndDate", "로테이션 변경일: 올바른 날짜를 선택해주세요."]);
+      }
+
+      const need = Math.max(0, target - owned);
+      if (!errors.length && need > 1000) {
+        errors.push([
+          "cfTarget",
+          "이 계산기는 추가 필요 수량 1,000장까지 지원합니다."
+        ]);
+      }
+
+      if (showErrors("clone", errors, popup)) {
+        $("cfResultCard").hidden = true;
+        lastClone = null;
+        return false;
+      }
+
+      $("cfResultCard").hidden = false;
+
+      const nowKst = getNowKst();
+      const todayIso = nowKst.iso;
+      if (!defaultCloneRotation || defaultCloneRotation.key !== nowKst.key) {
+        const prevDate = defaultCloneRotation ? defaultCloneRotation.date : null;
+        defaultCloneRotation = { ...getDefaultCloneRotation(nowKst), key: nowKst.key };
+        if (prevDate && endIso === prevDate && defaultCloneRotation.date !== prevDate) {
+          endIso = defaultCloneRotation.date;
+          $("cfEndDate").value = endIso;
+        }
+      }
+
+      $("cfEndDateLabel").textContent =
+        endIso === defaultCloneRotation.date
+          ? `(${defaultCloneRotation.label})`
+          : "(직접 지정 · 당일 포함)";
+
+      const todayDone = $("cfTodayDone").checked;
+      const effectiveStart = todayDone ? addIsoDays(todayIso, 1) : todayIso;
+      const daysLeft = Math.max(0, diffIsoDays(effectiveStart, endIso) + 1);
+      const totalRuns = daysLeft * CF_DAILY_RUNS;
+      const expected = totalRuns * CF_P;
+
+      $("cfPeriodBar").innerHTML = daysLeft > 0
+        ? `<span>계산 기간: ${formatShortIso(effectiveStart)} ~ ${formatShortIso(endIso)}</span>` +
+          `<strong>남은 ${daysLeft}일 (${totalRuns}회)</strong>`
+        : `<span>기준일(${formatShortIso(endIso)}) 이전 종료</span><strong>남은 0일 (0회)</strong>`;
+
+      $("cfExpectedLabel").textContent =
+        `로테이션 전 예상 획득 (${daysLeft}일 · ${totalRuns}회)`;
+      $("cfExpected").textContent = owned > 0
+        ? `약 ${expected.toFixed(1)}장 (보유 포함 ${(owned + expected).toFixed(1)}장)`
+        : `약 ${expected.toFixed(1)}장`;
+
+      const { meanDays, quantiles } = cloneDistribution(need);
+      const medianDay = quantiles[4].days;
+
+      $("cfMeanDays").textContent = need === 0
+        ? "0일 (0회)"
+        : `약 ${meanDays.toFixed(1)}일 (약 ${Math.round(meanDays * CF_DAILY_RUNS)}회)`;
+      $("cfMedianDays").textContent = need === 0
+        ? "0일 (0회)"
+        : `${medianDay}일 (${medianDay * CF_DAILY_RUNS}회)`;
+
+      const prob = need === 0 ? 1 : binomSurvival(totalRuns, need, CF_P);
+      const probText = formatChance(prob);
+      $("cfProbVal").textContent = probText;
+      $("cfProbSub").textContent =
+        `${formatIsoDots(endIso)}까지 ${daysLeft}일 (${totalRuns}회) · 추가 필요 ${need}장`;
+
+      $("cfPctTableBody").innerHTML = "";
+      const rows = [];
+
+      for (const q of quantiles) {
+        const d = q.days;
+        const runs = d * CF_DAILY_RUNS;
+        const over = d > 0 && d > daysLeft;
+        const dateText = d === 0
+          ? "달성 완료"
+          : formatShortIso(addIsoDays(effectiveStart, d - 1)) + (over ? " (초과)" : "");
+
+        rows.push({ label: q.label, days: d, runs, dateText });
+
+        const tr = document.createElement("tr");
+        if (q.hl) tr.className = "highlight";
+        tr.innerHTML =
+          `<td>${q.label}</td>` +
+          `<td><b>${d}일</b> <span class="sub-label">(${runs}회)</span></td>` +
+          `<td${over ? ' class="cf-over"' : ""}>${dateText}</td>`;
+        $("cfPctTableBody").appendChild(tr);
+      }
+
+      lastClone = {
+        target,
+        owned,
+        need,
+        endIso,
+        todayDone,
+        daysLeft,
+        totalRuns,
+        expected,
+        meanDays,
+        medianDay,
+        probText,
+        rows
+      };
+
+      return true;
+    }
+
+    function copyCloneResult() {
+      if (!calcClone(true)) return;
+
+      const {
+        target, owned, need, endIso, todayDone,
+        daysLeft, totalRuns, expected, meanDays, medianDay, probText, rows
+      } = lastClone;
+
+      let t = "[클론 팩토리 증명서 견적 결과]\n";
+      t += `목표: ${target}장`;
+      if (owned > 0) t += ` (보유 ${owned}장 → 추가 필요 ${need}장)`;
+      t += "\n";
+      t += `기준일: ${formatIsoDots(endIso)}까지 (${daysLeft}일 · ${totalRuns}회, ${todayDone ? "오늘 완료 제외" : "오늘 포함"})\n`;
+      t += `예상 획득: 약 ${expected.toFixed(1)}장\n`;
+      t += `👉 로테이션 전 달성 확률: ${probText}\n`;
+      t += need === 0
+        ? "평균 소요: 0일 (0회)\n중앙값: 0일 (0회)\n\n"
+        : `평균 소요: 약 ${meanDays.toFixed(1)}일 (약 ${Math.round(meanDays * CF_DAILY_RUNS)}회)\n중앙값: ${medianDay}일 (${medianDay * CF_DAILY_RUNS}회)\n\n`;
+
+      for (const r of rows) {
+        t += `${r.label}: ${r.days}일 (${r.runs}회, ${r.dateText})\n`;
+      }
+
+      copyText(t);
+    }
+
+    for (const id of ["cfTarget", "cfOwned"]) {
+      $(id).addEventListener("input", () => {
+        if (id === "cfTarget") setCfCustom();
+        calcClone();
+      });
+      $(id).addEventListener("change", () => {
+        calcClone(true);
+      });
+    }
+
+    $("cfEndDate").addEventListener("change", () => {
+      calcClone(true);
+    });
+
+    $("cfTodayDone").addEventListener("change", () => {
+      calcClone();
+    });
+
+    // 첫 화면은 엘다인(0.6% · 300Pt) 기본 프리셋으로 초기화하고 클론 팩토리 기본값을 준비합니다.
     switchPickupMode("eldine");
+    const initNowKst = getNowKst();
+    defaultCloneRotation = { ...getDefaultCloneRotation(initNowKst), key: initNowKst.key };
+    $("cfEndDate").value = defaultCloneRotation.date;
+    renderCfPresets();
+    calcClone();
   </script>
 </body>
 </html>
