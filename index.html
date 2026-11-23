@@ -8,8 +8,8 @@ A. 디자인 설정       : 색상, 글자 크기, 간격, 모바일/PC 배치, 
 B. 견적 입력 화면    : (사도 픽업 계산기) 신앙심, 모집권, 목표 개수 입력란
 C. 견적 결과 화면    : (사도 픽업 계산기) 평균, 중앙값, 달성 확률, 달성선 표
 D. 사후 운 검증 화면 : (사도 픽업 계산기) 획득 수 입력란과 결과 카드
-E. 기본값과 프리셋   : 픽업 확률 P, 목표 프리셋 PRESETS
-F. 확률 계산         : binomExact, binomSurvival
+E. 기본값과 프리셋   : 사도 종류별 설정(PICKUP_MODES), 프리셋 렌더링
+F. 확률 계산         : binomExact, binomSurvival, buildProbTables
 G. 목표 달성 계산    : advancePlan, progressCdf, planDistribution
 H. 입력 검증         : numericErrors, showErrors
 I. 견적 출력과 복사  : calcPlan, copyPlanResult
@@ -17,9 +17,9 @@ J. 사후 운 평가      : gradeFor, fillSection, calcReview
 K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
 [계산 조건]
-- 뽑기 1회마다 신앙심 1Pt를 얻고 300Pt로 엘다인 1개를 교환합니다.
-- 신앙심 교환 외에 별도의 300회 보너스를 추가하지 않습니다.
-- 듀얼은 A를 먼저 완성하고 B로 전환합니다.
+- 뽑기 1회마다 신앙심 1Pt를 얻고, 엘다인은 300Pt / 일반 사도는 200Pt로 1개를 교환합니다.
+- 신앙심 교환 외에 별도의 천장 보너스를 추가하지 않습니다.
+- 쌍다인 픽업은 A를 먼저 완성하고 B로 전환합니다. 일반 사도는 단일 픽업으로 계산합니다.
 - 10연차 도중에는 배너를 바꾸지 않습니다.
 - 달성선 횟수는 1회 단위, 세트 수는 올림하여 표시합니다.
 - 보유 모집권의 마지막 1-9회는 단챠로 계산합니다.
@@ -27,8 +27,8 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
 [수정 시 확인]
 - HTML의 id를 변경하면 JavaScript의 참조도 함께 바꿔야 합니다.
-- 확률을 변경하면 화면 설명과 사후 평가 확률도 함께 확인하세요.
-- 신앙심 교환 기준 300이나 세트 크기 10을 바꾸려면 관련 계산 전체를 점검해야 합니다.
+- 확률을 변경하면 PICKUP_MODES의 표시 문구와 사후 평가 확률도 함께 확인하세요.
+- 신앙심 교환 기준이나 세트 크기 10을 바꾸려면 관련 계산 전체를 점검해야 합니다.
 -->
 <head>
   <meta charset="utf-8">
@@ -113,7 +113,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     .tool-btn {
       padding: 7px 13px;
       border: 1px solid var(--border);
-      border-radius: 999px;
+      border-radius: 8px;
       background: var(--card);
       color: var(--sub);
       font-size: .82rem;
@@ -122,15 +122,11 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       transition: background .15s, border-color .15s, color .15s;
     }
 
-    .tool-btn:hover {
+    .tool-btn:hover,
+    .tool-btn.active {
+      background: var(--accent-bg);
       border-color: var(--accent);
       color: var(--accent);
-    }
-
-    .tool-btn.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
     }
 
     .tool-view {
@@ -152,6 +148,80 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       font-size: .82rem;
       margin: 0 0 14px;
       line-height: 1.45;
+    }
+
+    /* 부가 옵션: 일반 사도 모드 작은 토글 */
+    .mode-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 7px 10px;
+      margin-bottom: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--sub);
+      font-size: .78rem;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+
+    .mode-toggle-row:hover,
+    .mode-toggle-row.active {
+      background: var(--accent-bg);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .mode-toggle-row .sub-label {
+      color: inherit;
+      opacity: .82;
+    }
+
+    .normal-mode-toggle {
+      position: absolute;
+      opacity: 0;
+      width: 1px;
+      height: 1px;
+      pointer-events: none;
+    }
+
+    .toggle-track {
+      position: relative;
+      flex-shrink: 0;
+      width: 32px;
+      height: 18px;
+      border-radius: 999px;
+      background: var(--border);
+      transition: background .15s;
+    }
+
+    .toggle-track::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--card);
+      transition: transform .15s;
+    }
+
+    .normal-mode-toggle:checked + .toggle-track {
+      background: var(--accent);
+    }
+
+    .normal-mode-toggle:checked + .toggle-track::after {
+      transform: translateX(14px);
+    }
+
+    .normal-mode-toggle:focus-visible + .toggle-track {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
 
     /* 상단 탭 */
@@ -238,7 +308,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 6px;
-      margin-bottom: 14px;
+      margin-bottom: 10px;
     }
 
     .btn-preset {
@@ -517,9 +587,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     <!-- [하위 분류 1] 사도 픽업 계산기 -->
     <section id="tool-pickup" class="tool-view active" aria-label="사도 픽업 계산기">
       <h2 class="tool-title">사도 픽업 계산기</h2>
-      <p class="desc">
-        엘다인 픽업 견적 &amp; 비틱 계산기 · 확률 0.6% / 신앙심 300Pt로 1개 교환 / 10연 우선, 남은 모집권은 단챠
-      </p>
+      <p class="desc">사도 픽업 견적 &amp; 비틱 계산기</p>
 
       <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('plan')">
@@ -530,16 +598,21 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
         </button>
       </div>
 
-      <!-- B. 견적 입력 화면: 프리셋 버튼은 PRESETS에서 자동 생성합니다. -->
+      <!-- B. 견적 입력 화면: 프리셋 버튼은 PICKUP_MODES에서 자동 생성합니다. -->
       <div id="tab-plan" class="tab-content active">
       <div class="card">
         <label>목표 프리셋</label>
         <div class="preset-grid" id="presetGrid"></div>
+        <label class="mode-toggle-row">
+          <span>일반 사도 모드로 계산 <span class="sub-label">(0.8% · 200Pt)</span></span>
+          <input type="checkbox" class="normal-mode-toggle" onchange="switchPickupMode(this.checked ? 'normal' : 'eldine')">
+          <span class="toggle-track" aria-hidden="true"></span>
+        </label>
 
         <div class="field">
           <label for="planFaith">
             보유 신앙심
-            <span class="sub-label">(시작 포인트, 300Pt = 1개 교환)</span>
+            <span class="sub-label" id="planFaithSub">(시작 포인트, 300Pt = 1개 교환)</span>
           </label>
           <input
             type="number" id="planFaith" value="0"
@@ -560,17 +633,17 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
         </div>
 
         <div class="field">
-          <label for="planA">엘다인 A 목표 개수</label>
+          <label for="planA" id="planALabel">엘다인 A 목표 개수</label>
           <input
             type="number" id="planA" value="7"
             min="0" step="1" inputmode="numeric"
           >
         </div>
 
-        <div>
+        <div id="planBField">
           <label for="planB">
             엘다인 B 목표 개수
-            <span class="sub-label">(듀얼 가챠 시만 입력, 단일은 0)</span>
+            <span class="sub-label">(쌍다인 픽업 시만 입력, 단일은 0)</span>
           </label>
           <input
             type="number" id="planB" value="0"
@@ -578,8 +651,8 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
           >
         </div>
 
-        <p class="note">
-          ※ 듀얼은 A를 먼저 완성한 뒤 B로 전환합니다.
+        <p class="note" id="planNote">
+          ※ 쌍다인은 A를 먼저 완성한 뒤 B로 전환합니다.
           자연 획득분과 신앙심으로 A를 완성할 수 있으면 필요한 만큼 교환합니다.<br>
           ※ 보유 모집권이 1-9개 남으면 단챠로 진행하고 매회 전환 여부를 확인합니다.
         </p>
@@ -605,7 +678,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
             </div>
           </div>
 
-          <p class="note">
+          <p class="note" id="planSummaryNote">
             달성선은 1회 단위로 계산하고 세트 수는 올림합니다.
             A 완료 후 배너 전환은 다음 세트부터입니다.
             평균은 10연 소모량 기준이며, 보유 자원 확률은 마지막 단챠까지 반영합니다.
@@ -647,6 +720,12 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     <!-- D. 사후 운 검증 화면: 입력 및 결과 카드 -->
     <div id="tab-review" class="tab-content">
       <div class="card">
+        <label class="mode-toggle-row">
+          <span>일반 사도 모드로 계산 <span class="sub-label">(0.8% · 200Pt)</span></span>
+          <input type="checkbox" class="normal-mode-toggle" onchange="switchPickupMode(this.checked ? 'normal' : 'eldine')">
+          <span class="toggle-track" aria-hidden="true"></span>
+        </label>
+
         <div class="field">
           <label for="pulls">전체 가챠 횟수</label>
           <input
@@ -657,8 +736,8 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
         <div class="field">
           <label for="eldine">
-            엘다인 획득 수
-            <span class="sub-label">(확률 0.6%)</span>
+            <span id="eldineLabel">엘다인 획득 수</span>
+            <span class="sub-label" id="eldineRateSub">(확률 0.6%)</span>
           </label>
           <input
             type="number" id="eldine" min="0" step="1"
@@ -666,7 +745,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
           >
           <label class="check-label">
             <input type="checkbox" id="includeCeil">
-            300회마다 신앙심을 즉시 교환했다고 가정 (자동 차감)
+            <span id="includeCeilText">300회마다 신앙심을 즉시 교환했다고 가정 (자동 차감)</span>
           </label>
           <div class="note">
             체크 시 시작 신앙심 0, 교환분을 포함한 획득 수를 입력하세요.
@@ -676,7 +755,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
         <div class="field">
           <label for="general">
             일반 3성 획득 수
-            <span class="sub-label">(확률 2.4%)</span>
+            <span class="sub-label" id="generalRateSub">(확률 2.4%)</span>
           </label>
           <input
             type="number" id="general" min="0" step="1"
@@ -709,7 +788,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
         <div class="result-section" id="secEldine">
           <div class="rs-title">
             <span class="dot" style="background:#2c5aa0"></span>
-            엘다인 (0.6%) 운 평가
+            <span id="secEldineTitle">엘다인 (0.6%) 운 평가</span>
           </div>
           <div class="rs-main">
             <span class="pct-big" id="pctEldine">-</span>
@@ -730,7 +809,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
         <div class="result-section" id="secGeneral" hidden>
           <div class="rs-title">
             <span class="dot" style="background:#27ae60"></span>
-            일반 3성 (2.4%) 운 평가
+            <span id="secGeneralTitle">일반 3성 (2.4%) 운 평가</span>
           </div>
           <div class="rs-main">
             <span class="pct-big" id="pctGeneral">-</span>
@@ -774,8 +853,8 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
     <!-- 하단 안내 및 방문자 배지 -->
     <div class="footer">
-      * 픽업 0.6% / 일반 3성 2.4% / 전체 3성 3.0%<br>
-      * 공유 신앙심 반영 / A 우선 전략 / 보유 자원은 마지막 단챠 포함<br>
+      <span id="footerRates">* 픽업 0.6% / 일반 3성 2.4% / 전체 3성 3.0%</span><br>
+      <span id="footerStrategy">* 공유 신앙심 반영 / A 우선 전략 / 보유 자원은 마지막 단챠 포함</span><br>
       * 사후 운 평가는 해당 획득 수 이상을 얻을 확률입니다.
     </div>
     <div style="text-align:center;margin-top:12px">
@@ -793,9 +872,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
        E. 기본값과 프리셋
        ================================================== */
 
-    // P: 엘다인 픽업 확률. 0.006 = 0.6%.
     const $ = (id) => document.getElementById(id);
-    const P = 0.006;
 
     // 빈 입력은 0으로 해석합니다.
     // 정수가 아닌 입력은 numericErrors에서 거부합니다.
@@ -804,39 +881,86 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     // 부동소수점 오차로 확률이 0-1 범위를 벗어나지 않도록 제한합니다.
     const clamp = (x) => Math.max(0, Math.min(1, x));
 
+    // 사도 종류별 확률, 신앙심 교환 기준, 프리셋 설정.
     // [A 목표, B 목표, 버튼 문구, 기본 선택 여부]
-    // 엘시드 사용 시 필요한 개수가 줄어든 목표를 직접 지정합니다.
-    const PRESETS = [
-      [6, 0, "단일 A2<br>(6개, 엘시드 사용)"],
-      [7, 0, "단일 A2<br>(7개)", 1],
-      [9, 0, "단일 A3<br>(9개, 엘시드 사용)"],
-      [10, 0, "단일 A3<br>(10개)"],
-      [6, 6, "A2+A2<br>(12개, 엘시드 사용)"],
-      [7, 7, "A2+A2<br>(14개)"],
-      [10, 7, "A3+A2<br>(17개)"],
-      [9, 9, "A3+A3<br>(18개, 엘시드 사용)"],
-      [10, 10, "A3+A3<br>(20개)"]
-    ];
-
-    // 프리셋 목록을 화면의 버튼으로 만듭니다.
-    for (const [a, b, t, on] of PRESETS) {
-      const x = document.createElement("button");
-      x.className = "btn-preset" + (on ? " active" : "");
-      x.innerHTML = t;
-      x.onclick = () => setPreset(a, b, x);
-      $("presetGrid").appendChild(x);
-    }
-
-    const custom = document.createElement("button");
-    custom.className = "btn-preset btn-custom-row";
-    custom.id = "btnCustom";
-    custom.textContent = "✏️ 직접 입력 (자유 선택)";
-    custom.onclick = () => {
-      setCustom();
-      $("planA").focus();
-      $("planA").select();
+    const PICKUP_MODES = {
+      eldine: {
+        key: "eldine",
+        name: "엘다인",
+        withGwa: "엘다인과",
+        p: 0.006,
+        generalP: 0.024,
+        exchange: 300,
+        allowDual: true,
+        rateText: "0.6%",
+        generalRateText: "2.4%",
+        presets: [
+          [6, 0, "단일 A2<br>(6개, 엘시드 사용)"],
+          [7, 0, "단일 A2<br>(7개)", 1],
+          [9, 0, "단일 A3<br>(9개, 엘시드 사용)"],
+          [10, 0, "단일 A3<br>(10개)"],
+          [6, 6, "A2+A2<br>(12개, 엘시드 사용)"],
+          [7, 7, "A2+A2<br>(14개)"],
+          [10, 7, "A3+A2<br>(17개)"],
+          [9, 9, "A3+A3<br>(18개, 엘시드 사용)"],
+          [10, 10, "A3+A3<br>(20개)"]
+        ]
+      },
+      normal: {
+        key: "normal",
+        name: "일반 사도",
+        withGwa: "일반 사도와",
+        p: 0.008,
+        generalP: 0.022,
+        exchange: 200,
+        allowDual: false,
+        rateText: "0.8%",
+        generalRateText: "2.2%",
+        presets: [
+          [1, 0, "명함<br>(1개)", 1],
+          [7, 0, "단일 A2<br>(7개)"],
+          [10, 0, "단일 A3<br>(10개)"]
+        ]
+      }
     };
-    $("presetGrid").appendChild(custom);
+
+    let currentMode = PICKUP_MODES.eldine;
+
+    // 현재 사도 종류에 맞게 프리셋 버튼과 기본 목표 값을 생성합니다.
+    function renderPresets(mode) {
+      const grid = $("presetGrid");
+      grid.innerHTML = "";
+
+      let defA = 7;
+      let defB = 0;
+
+      for (const [a, b, t, on] of mode.presets) {
+        const x = document.createElement("button");
+        x.className = "btn-preset" + (on ? " active" : "");
+        x.innerHTML = t;
+        x.onclick = () => setPreset(a, b, x);
+        grid.appendChild(x);
+
+        if (on) {
+          defA = a;
+          defB = b;
+        }
+      }
+
+      const custom = document.createElement("button");
+      custom.className = "btn-preset btn-custom-row";
+      custom.id = "btnCustom";
+      custom.textContent = "✏️ 직접 입력 (자유 선택)";
+      custom.onclick = () => {
+        setCustom();
+        $("planA").focus();
+        $("planA").select();
+      };
+      grid.appendChild(custom);
+
+      $("planA").value = defA;
+      $("planB").value = defB;
+    }
 
     // 상위 도구(하위 분류) 전환
     function switchTool(toolId) {
@@ -877,6 +1001,59 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       $("planA").value = a;
       $("planB").value = b;
       calcPlan();
+    }
+
+    // 사도 종류(엘다인 / 일반 사도) 전환
+    function switchPickupMode(modeKey) {
+      const mode = PICKUP_MODES[modeKey] || PICKUP_MODES.eldine;
+      currentMode = mode;
+
+      document.querySelectorAll(".normal-mode-toggle").forEach((el) => {
+        el.checked = mode.key === "normal";
+        const row = el.closest(".mode-toggle-row");
+        if (row) row.classList.toggle("active", el.checked);
+      });
+
+      renderPresets(mode);
+
+      $("planBField").hidden = !mode.allowDual;
+      if (!mode.allowDual) {
+        $("planB").value = 0;
+      }
+
+      $("planFaithSub").textContent = `(시작 포인트, ${mode.exchange}Pt = 1개 교환)`;
+      $("planALabel").textContent = mode.allowDual ? "엘다인 A 목표 개수" : "목표 개수";
+      $("planNote").innerHTML = mode.allowDual
+        ? "※ 쌍다인은 A를 먼저 완성한 뒤 B로 전환합니다. 자연 획득분과 신앙심으로 A를 완성할 수 있으면 필요한 만큼 교환합니다.<br>※ 보유 모집권이 1-9개 남으면 단챠로 진행하고 매회 전환 여부를 확인합니다."
+        : "※ 일반 사도는 단일 픽업으로 진행되며 신앙심 200Pt로 1개를 교환합니다.<br>※ 보유 모집권이 1-9개 남으면 단챠까지 반영합니다.";
+      $("planSummaryNote").textContent = mode.allowDual
+        ? "달성선은 1회 단위로 계산하고 세트 수는 올림합니다. A 완료 후 배너 전환은 다음 세트부터입니다. 평균은 10연 소모량 기준이며, 보유 자원 확률은 마지막 단챠까지 반영합니다."
+        : "달성선은 1회 단위로 계산하고 세트 수는 올림합니다. 평균은 10연 소모량 기준이며, 보유 자원 확률은 마지막 단챠까지 반영합니다.";
+
+      $("eldineLabel").textContent = `${mode.name} 획득 수`;
+      $("eldineRateSub").textContent = `(확률 ${mode.rateText})`;
+      $("includeCeilText").textContent =
+        `${mode.exchange}회마다 신앙심을 즉시 교환했다고 가정 (자동 차감)`;
+      $("generalRateSub").textContent = `(확률 ${mode.generalRateText})`;
+      $("autoNote").textContent =
+        `※ ${mode.name} + 일반3성 합계로 자동 계산됨 (미입력은 0)`;
+      $("secEldineTitle").textContent = `${mode.name} (${mode.rateText}) 운 평가`;
+      $("secGeneralTitle").textContent = `일반 3성 (${mode.generalRateText}) 운 평가`;
+
+      $("footerRates").textContent =
+        `* 픽업 ${mode.rateText} / 일반 3성 ${mode.generalRateText} / 전체 3성 3.0%`;
+      $("footerStrategy").textContent = mode.allowDual
+        ? "* 공유 신앙심 반영 / A 우선 전략 / 보유 자원은 마지막 단챠 포함"
+        : "* 신앙심 200Pt 교환 반영 / 단일 픽업 / 보유 자원은 마지막 단챠 포함";
+
+      FIELDS.planA = mode.allowDual ? "엘다인 A 목표" : "목표 개수";
+      FIELDS.eldine = `${mode.name} 획득 수`;
+
+      lastAlert.plan = "";
+      lastAlert.review = "";
+
+      calcPlan();
+      calcReview();
     }
 
     /* ==================================================
@@ -972,17 +1149,32 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       return clamp(1 - s);
     }
 
-    // 10연차에서 자연 획득 0-10개의 확률.
-    // 누적 반올림 오차를 줄이기 위해 합을 1로 정규화합니다.
-    const STEP_PMF = Float64Array.from(
-      { length: 11 },
-      (_, i) => binomExact(10, i, P)
-    );
-    const stepMass = STEP_PMF.reduce((a, b) => a + b, 0);
+    // 10연차 자연 획득 분포와 세트 내부 r회 tail 확률을 사도 종류별로 미리 계산합니다.
+    // 누적 반올림 오차를 줄이기 위해 10연차 분포의 합을 1로 정규화합니다.
+    function buildProbTables(p) {
+      const stepPmf = Float64Array.from(
+        { length: 11 },
+        (_, i) => binomExact(10, i, p)
+      );
+      const stepMass = stepPmf.reduce((a, b) => a + b, 0);
 
-    for (let i = 0; i < 11; i++) {
-      STEP_PMF[i] /= stepMass;
+      for (let i = 0; i < 11; i++) {
+        stepPmf[i] /= stepMass;
+      }
+
+      const tailSurv = Array.from({ length: 10 }, (_, r) =>
+        Array.from({ length: r + 1 }, (_, k) =>
+          binomSurvival(r, k, p)
+        )
+      );
+
+      return { stepPmf, tailSurv };
     }
+
+    const PROB_TABLES = {
+      eldine: buildProbTables(PICKUP_MODES.eldine.p),
+      normal: buildProbTables(PICKUP_MODES.normal.p)
+    };
 
     /* ==================================================
        G. 목표 달성 계산
@@ -1004,12 +1196,13 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     f: 시작 신앙심
     before/after: 뽑기 전후의 누적 교환 가능 개수
     */
-    function advancePlan(state, n, size, kA, kB, f) {
+    function advancePlan(state, n, size, kA, kB, f, mode = currentMode) {
       const w = kB + 1;
       const next = new Float64Array(state.mass.length);
-      const before = Math.floor((f + n) / 300);
-      const after = Math.floor((f + n + size) / 300);
-      const pmf = size === 10 ? STEP_PMF : [1 - P, P];
+      const before = Math.floor((f + n) / mode.exchange);
+      const after = Math.floor((f + n + size) / mode.exchange);
+      const { stepPmf } = PROB_TABLES[mode.key];
+      const pmf = size === 10 ? stepPmf : [1 - mode.p, mode.p];
 
       let done = state.done;
 
@@ -1046,9 +1239,10 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     도중에 A가 완성되어도 B로 바꾸지 않습니다.
     다음 세트의 상태는 advancePlan(size=10)으로 별도 계산합니다.
     */
-    function progressCdf(state, n, r, kA, kB, f) {
-      const before = Math.floor((f + n) / 300);
-      const after = Math.floor((f + n + r) / 300);
+    function progressCdf(state, n, r, kA, kB, f, mode = currentMode) {
+      const before = Math.floor((f + n) / mode.exchange);
+      const after = Math.floor((f + n + r) / mode.exchange);
+      const { tailSurv } = PROB_TABLES[mode.key];
       const w = kB + 1;
 
       let done = state.done;
@@ -1062,20 +1256,13 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
           const need = Math.max(0, a + b - after);
           if (need <= r) {
-            done += mass * TAIL_SURV[r][need];
+            done += mass * tailSurv[r][need];
           }
         }
       }
 
       return clamp(done);
     }
-
-    // 세트 내부 r회에서 k개 이상 획득할 확률을 미리 계산합니다.
-    const TAIL_SURV = Array.from({ length: 10 }, (_, r) =>
-      Array.from({ length: r + 1 }, (_, k) =>
-        binomSurvival(r, k, P)
-      )
-    );
 
     /*
     반환값:
@@ -1087,17 +1274,17 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     probability의 마지막 단챠에서는 매회 배너 전환이 가능합니다.
     fine의 세트 내부 계산과는 이 조건이 다릅니다.
     */
-    function planDistribution(kA, kB, f, tickets = null) {
+    function planDistribution(kA, kB, f, tickets = null, mode = currentMode) {
       const total = kA + kB;
 
       // 신앙심 교환만으로도 목표를 채우는 시점까지 계산합니다.
-      const steps = Math.ceil(Math.max(0, 300 * total - f) / 10);
+      const steps = Math.ceil(Math.max(0, mode.exchange * total - f) / 10);
       const cdf = new Float64Array(steps + 1);
       const fine = new Float64Array(steps * 10 + 1);
 
       let state = {
         mass: new Float64Array((kA + 1) * (kB + 1)),
-        done: f >= 300 * total ? 1 : 0
+        done: f >= mode.exchange * total ? 1 : 0
       };
 
       if (!state.done) {
@@ -1128,7 +1315,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
         let tail = state;
 
         for (let j = 0; j < remaining; j++) {
-          tail = advancePlan(tail, n + j, 1, kA, kB, f);
+          tail = advancePlan(tail, n + j, 1, kA, kB, f, mode);
         }
 
         probability = tail.done;
@@ -1139,12 +1326,12 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       for (let i = 1; i <= steps; i++) {
         for (let r = 1; r < 10; r++) {
           fine[(i - 1) * 10 + r] = progressCdf(
-            state, (i - 1) * 10, r, kA, kB, f
+            state, (i - 1) * 10, r, kA, kB, f, mode
           );
         }
 
         state = advancePlan(
-          state, (i - 1) * 10, 10, kA, kB, f
+          state, (i - 1) * 10, 10, kA, kB, f, mode
         );
 
         if (i === steps) state.done = 1;
@@ -1244,12 +1431,15 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     let lastPlan = null;
 
     function calcPlan(popup = false) {
-      const errors = numericErrors([
-        "planFaith", "planTickets", "planA", "planB"
-      ]);
+      const mode = currentMode;
+      const errors = numericErrors(
+        mode.allowDual
+          ? ["planFaith", "planTickets", "planA", "planB"]
+          : ["planFaith", "planTickets", "planA"]
+      );
 
       const kA = int("planA");
-      const kB = int("planB");
+      const kB = mode.allowDual ? int("planB") : 0;
       const f = int("planFaith");
       const tickets = $("planTickets").value.trim() === ""
         ? null
@@ -1258,7 +1448,9 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       if (!errors.length && kA + kB === 0) {
         errors.push([
           "planA",
-          "A 또는 B 목표를 1개 이상 입력해주세요."
+          mode.allowDual
+            ? "A 또는 B 목표를 1개 이상 입력해주세요."
+            : "목표 개수를 1개 이상 입력해주세요."
         ]);
       }
 
@@ -1266,7 +1458,9 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       if (!errors.length && kA + kB > 100) {
         errors.push([
           "planA",
-          "이 계산기는 A와 B 목표 합계 100개까지 지원합니다."
+          mode.allowDual
+            ? "이 계산기는 A와 B 목표 합계 100개까지 지원합니다."
+            : "이 계산기는 목표 100개까지 지원합니다."
         ]);
       }
 
@@ -1278,9 +1472,9 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
       $("planResultCard").hidden = false;
 
-      const result = planDistribution(kA, kB, f, tickets);
+      const result = planDistribution(kA, kB, f, tickets, mode);
       const { fine, mean, probability } = result;
-      lastPlan = { kA, kB, f, tickets, result };
+      lastPlan = { kA, kB, f, tickets, mode, result };
 
       // 달성선 항목을 추가하거나 문구를 바꾸려면 이 목록을 수정합니다.
       // 세 번째 값 1은 표에서 강조할 행을 뜻합니다.
@@ -1366,8 +1560,8 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     function copyPlanResult() {
       if (!calcPlan(true)) return;
 
-      const { kA, kB, f, tickets } = lastPlan;
-      let t = "[엘다인 픽업 견적 결과]\n";
+      const { kA, kB, f, tickets, mode } = lastPlan;
+      let t = `[${mode.name} 픽업 견적 결과]\n`;
 
       if (f > 0) {
         t += `보유 신앙심: ${f} Pt\n`;
@@ -1378,9 +1572,14 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
         t += `👉 내 목표 달성 확률: ${$("myProbVal").textContent}\n`;
       }
 
-      t += `목표: 엘다인 A ${kA}개`;
-      t += kB > 0 ? `, 엘다인 B ${kB}개\n` : "\n";
-      t += "전략: A 완성 후 B, 10연 우선·잔여 모집권은 단챠\n";
+      if (mode.allowDual) {
+        t += `목표: 엘다인 A ${kA}개`;
+        t += kB > 0 ? `, 엘다인 B ${kB}개\n` : "\n";
+        t += "전략: A 완성 후 B, 10연 우선·잔여 모집권은 단챠\n";
+      } else {
+        t += `목표: 일반 사도 ${kA}개\n`;
+        t += "전략: 단일 픽업 (200Pt 교환), 10연 우선·잔여 모집권은 단챠\n";
+      }
       t += `평균 기댓값(10연): ${$("planMean").textContent}\n`;
       t += `중앙값: ${$("planMedian").textContent}\n\n`;
 
@@ -1492,24 +1691,26 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       const hasTotal = auto || $("total3").value.trim() !== "";
       const total = auto ? e + g : int("total3");
 
+      const mode = currentMode;
+
       // 즉시 교환 가정: 시작 신앙심 0, 교환분 포함 획득 수를 입력합니다.
-      // 교환분은 확률 획득이 아니므로 엘다인과 전체 3성에서 차감합니다.
+      // 교환분은 확률 획득이 아니므로 픽업과 전체 3성에서 차감합니다.
       const bonus = $("includeCeil").checked
-        ? Math.floor(n / 300)
+        ? Math.floor(n / mode.exchange)
         : 0;
 
       if (!errors.length) {
         if (e < bonus) {
           errors.push([
             "eldine",
-            `즉시 교환 가정에서는 교환분만 ${bonus}개입니다. 엘다인 획득 수는 ${bonus}개 이상이어야 합니다.`
+            `즉시 교환 가정에서는 교환분만 ${bonus}개입니다. ${mode.name} 획득 수는 ${bonus}개 이상이어야 합니다.`
           ]);
         }
 
         if (e - bonus > n) {
           errors.push([
             "eldine",
-            `교환분을 제외한 엘다인 수는 전체 뽑기 ${n}회를 초과할 수 없습니다.`
+            `교환분을 제외한 ${mode.name} 수는 전체 뽑기 ${n}회를 초과할 수 없습니다.`
           ]);
         }
 
@@ -1523,7 +1724,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
         if (e - bonus >= 0 && e - bonus + g > n) {
           errors.push([
             "general",
-            `교환분을 제외한 엘다인과 일반 3성의 합은 전체 뽑기 ${n}회를 초과할 수 없습니다.`
+            `교환분을 제외한 ${mode.withGwa} 일반 3성의 합은 전체 뽑기 ${n}회를 초과할 수 없습니다.`
           ]);
         }
 
@@ -1545,7 +1746,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
           if (!auto && total < e + g) {
             errors.push([
               "total3",
-              "전체 3성 수는 입력한 엘다인과 일반 3성의 합보다 적을 수 없습니다."
+              `전체 3성 수는 입력한 ${mode.withGwa} 일반 3성의 합보다 적을 수 없습니다.`
             ]);
           }
         }
@@ -1563,12 +1764,12 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
       $("reviewResultCard").hidden = false;
 
-      // 사후 평가 확률: 엘다인 P, 일반 3성 0.024, 전체 3성 0.03.
-      fillSection("Eldine", n, e - bonus, P);
+      // 사후 평가 확률: 픽업 mode.p, 일반 3성 mode.generalP, 전체 3성 0.03.
+      fillSection("Eldine", n, e - bonus, mode.p);
 
       $("secGeneral").hidden = $("general").value.trim() === "";
       if (!$("secGeneral").hidden) {
-        fillSection("General", n, g, .024);
+        fillSection("General", n, g, mode.generalP);
       }
 
       $("secTotal").hidden = !hasTotal;
@@ -1612,8 +1813,8 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       calcReview(true);
     });
 
-    // 첫 화면에 기본 프리셋의 견적을 표시합니다.
-    calcPlan();
+    // 첫 화면은 엘다인(0.6% · 300Pt) 기본 프리셋으로 초기화합니다.
+    switchPickupMode("eldine");
   </script>
 </body>
 </html>
