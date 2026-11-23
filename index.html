@@ -12,7 +12,7 @@ E. 기본값과 프리셋   : 사도 종류별 설정(PICKUP_MODES), 프리셋 �
 F. 확률 계산         : binomExact, binomSurvival, buildProbTables
 G. 목표 달성 계산    : advancePlan, progressCdf, planDistribution
 H. 입력 검증         : numericErrors, showErrors
-I. 견적 출력과 복사  : calcPlan, copyPlanResult
+I. 견적 출력과 복사  : calcPlan, copyPlanResult, QUANTILES, copyText
 J. 사후 운 평가      : gradeFor, fillSection, calcReview
 K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
@@ -301,6 +301,44 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       font-size: .72rem;
       color: var(--sub);
       font-weight: 400;
+    }
+
+    .label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+
+    .faith-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin: 0;
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--sub);
+      font-size: .74rem;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+
+    .faith-toggle:hover,
+    .faith-toggle.active {
+      background: var(--accent-bg);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .faith-toggle input {
+      margin: 0;
+      cursor: pointer;
     }
 
     /* 목표 프리셋 버튼 */
@@ -610,10 +648,16 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
         </label>
 
         <div class="field">
-          <label for="planFaith">
-            보유 신앙심
-            <span class="sub-label" id="planFaithSub">(시작 포인트, 300Pt = 1개 교환)</span>
-          </label>
+          <div class="label-row">
+            <label for="planFaith" style="margin-bottom:0">
+              보유 신앙심
+              <span class="sub-label" id="planFaithSub">(시작 포인트, 300Pt = 1개 교환)</span>
+            </label>
+            <label class="faith-toggle" id="planNoFaithLabel">
+              <input type="checkbox" id="planNoFaith">
+              신앙심 미사용
+            </label>
+          </div>
           <input
             type="number" id="planFaith" value="0"
             min="0" step="1" placeholder="예: 150" inputmode="numeric"
@@ -664,7 +708,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
         <div class="result-section">
           <div class="rs-title">
             <span class="dot" style="background:#2c5aa0"></span>
-            견적 요약 (신앙심 교환 반영)
+            <span id="planResultTitle">견적 요약 (신앙심 교환 반영)</span>
           </div>
 
           <div class="stat-grid">
@@ -852,7 +896,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     </section>
 
     <!-- 하단 안내 및 방문자 배지 -->
-    <div class="footer">
+    <div class="footer" id="footerPickup">
       <span id="footerRates">* 픽업 0.6% / 일반 3성 2.4% / 전체 3성 3.0%</span><br>
       <span id="footerStrategy">* 공유 신앙심 반영 / A 우선 전략 / 보유 자원은 마지막 단챠 포함</span><br>
       * 사후 운 평가는 해당 획득 수 이상을 얻을 확률입니다.
@@ -1003,6 +1047,48 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       calcPlan();
     }
 
+    let savedPlanFaith = "0";
+
+    function updatePlanFaithUi() {
+      const noFaith = $("planNoFaith").checked;
+      const faithInput = $("planFaith");
+      const mode = currentMode;
+
+      if (noFaith) {
+        if (!faithInput.disabled) {
+          savedPlanFaith = faithInput.value;
+        }
+        faithInput.value = "0";
+        faithInput.disabled = true;
+      } else {
+        if (faithInput.disabled) {
+          faithInput.value = savedPlanFaith;
+        }
+        faithInput.disabled = false;
+      }
+
+      $("planNoFaithLabel").classList.toggle("active", noFaith);
+      $("planResultTitle").textContent = noFaith
+        ? "견적 요약 (신앙심 교환 미반영)"
+        : "견적 요약 (신앙심 교환 반영)";
+
+      if (noFaith) {
+        $("planNote").innerHTML = mode.allowDual
+          ? `※ 신앙심 교환을 사용하지 않고 순수 확률(${mode.rateText})만으로 계산합니다. 쌍다인은 A를 먼저 완성한 뒤 B로 전환합니다.<br>※ 보유 모집권이 1-9개 남으면 단챠로 진행하고 매회 전환 여부를 확인합니다.`
+          : `※ 신앙심 교환을 사용하지 않고 순수 확률(${mode.rateText})만으로 계산합니다.<br>※ 보유 모집권이 1-9개 남으면 단챠까지 반영합니다.`;
+        $("footerStrategy").textContent = mode.allowDual
+          ? "* 신앙심 미사용 (순수 확률) / A 우선 전략 / 보유 자원은 마지막 단챠 포함"
+          : "* 신앙심 미사용 (순수 확률) / 단일 픽업 / 보유 자원은 마지막 단챠 포함";
+      } else {
+        $("planNote").innerHTML = mode.allowDual
+          ? "※ 쌍다인은 A를 먼저 완성한 뒤 B로 전환합니다. 자연 획득분과 신앙심으로 A를 완성할 수 있으면 필요한 만큼 교환합니다.<br>※ 보유 모집권이 1-9개 남으면 단챠로 진행하고 매회 전환 여부를 확인합니다."
+          : "※ 일반 사도는 단일 픽업으로 진행되며 신앙심 200Pt로 1개를 교환합니다.<br>※ 보유 모집권이 1-9개 남으면 단챠까지 반영합니다.";
+        $("footerStrategy").textContent = mode.allowDual
+          ? "* 공유 신앙심 반영 / A 우선 전략 / 보유 자원은 마지막 단챠 포함"
+          : "* 신앙심 200Pt 교환 반영 / 단일 픽업 / 보유 자원은 마지막 단챠 포함";
+      }
+    }
+
     // 사도 종류(엘다인 / 일반 사도) 전환
     function switchPickupMode(modeKey) {
       const mode = PICKUP_MODES[modeKey] || PICKUP_MODES.eldine;
@@ -1023,9 +1109,6 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
       $("planFaithSub").textContent = `(시작 포인트, ${mode.exchange}Pt = 1개 교환)`;
       $("planALabel").textContent = mode.allowDual ? "엘다인 A 목표 개수" : "목표 개수";
-      $("planNote").innerHTML = mode.allowDual
-        ? "※ 쌍다인은 A를 먼저 완성한 뒤 B로 전환합니다. 자연 획득분과 신앙심으로 A를 완성할 수 있으면 필요한 만큼 교환합니다.<br>※ 보유 모집권이 1-9개 남으면 단챠로 진행하고 매회 전환 여부를 확인합니다."
-        : "※ 일반 사도는 단일 픽업으로 진행되며 신앙심 200Pt로 1개를 교환합니다.<br>※ 보유 모집권이 1-9개 남으면 단챠까지 반영합니다.";
       $("planSummaryNote").textContent = mode.allowDual
         ? "달성선은 1회 단위로 계산하고 세트 수는 올림합니다. A 완료 후 배너 전환은 다음 세트부터입니다. 평균은 10연 소모량 기준이며, 보유 자원 확률은 마지막 단챠까지 반영합니다."
         : "달성선은 1회 단위로 계산하고 세트 수는 올림합니다. 평균은 10연 소모량 기준이며, 보유 자원 확률은 마지막 단챠까지 반영합니다.";
@@ -1042,12 +1125,11 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
       $("footerRates").textContent =
         `* 픽업 ${mode.rateText} / 일반 3성 ${mode.generalRateText} / 전체 3성 3.0%`;
-      $("footerStrategy").textContent = mode.allowDual
-        ? "* 공유 신앙심 반영 / A 우선 전략 / 보유 자원은 마지막 단챠 포함"
-        : "* 신앙심 200Pt 교환 반영 / 단일 픽업 / 보유 자원은 마지막 단챠 포함";
 
       FIELDS.planA = mode.allowDual ? "엘다인 A 목표" : "목표 개수";
       FIELDS.eldine = `${mode.name} 획득 수`;
+
+      updatePlanFaithUi();
 
       lastAlert.plan = "";
       lastAlert.review = "";
@@ -1351,6 +1433,150 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       return { cdf, fine, mean, probability };
     }
 
+    // 신앙심 교환을 전혀 사용하지 않을 때(보유/누적 모두 미반영)의 목표 달성 분포를 계산합니다.
+    function planDistributionNoFaith(kA, kB, tickets = null, mode = currentMode) {
+      const p = mode.p;
+      const res = QUANTILES.map(([label, q, hl]) => ({
+        label,
+        q,
+        hl,
+        pulls: null,
+        sets: null
+      }));
+
+      // 단일 배너 (또는 A만 있는 경우)
+      if (kA === 0 || kB === 0) {
+        const k = kA + kB;
+        let mean = 0;
+        let qIdx = 0;
+        const maxSteps = 10000;
+
+        for (let i = 0; i <= maxSteps; i++) {
+          const cdf = binomSurvival(i * 10, k, p);
+
+          while (qIdx < res.length && cdf >= res[qIdx].q) {
+            let s = i === 0 ? 0 : (i - 1) * 10 + 1;
+            while (s < i * 10 && binomSurvival(s, k, p) < res[qIdx].q) s++;
+            res[qIdx].pulls = s;
+            res[qIdx].sets = Math.ceil(s / 10);
+            qIdx++;
+          }
+
+          if (qIdx >= res.length && 1 - cdf < 1e-12) {
+            break;
+          }
+
+          mean += (1 - cdf) * 10;
+        }
+
+        for (const r of res) {
+          if (r.pulls === null) {
+            r.pulls = maxSteps * 10;
+            r.sets = maxSteps;
+          }
+        }
+
+        const probability = tickets === null ? null : binomSurvival(tickets, k, p);
+        return { mean, probability, res };
+      }
+
+      // 쌍다인(듀얼): 10연 세트 경계에서 A를 완성한 뒤 B로 전환
+      const termsA = [];
+      let prevA = 0;
+      let meanA = 0;
+      const maxSteps = 10000;
+
+      for (let i = 0; i <= maxSteps; i++) {
+        const cdfA = binomSurvival(i * 10, kA, p);
+        if (i >= 1) {
+          const diff = cdfA - prevA;
+          if (diff > 1e-13) termsA.push({ i, prob: diff });
+        }
+        if (i >= 1 && 1 - cdfA < 1e-12) break;
+        meanA += (1 - cdfA) * 10;
+        prevA = cdfA;
+      }
+
+      const cdfB = [];
+      let meanB = 0;
+      for (let j = 0; j <= maxSteps; j++) {
+        const val = binomSurvival(j * 10, kB, p);
+        cdfB.push(val);
+        if (j >= 1 && 1 - val < 1e-12) break;
+        meanB += (1 - val) * 10;
+      }
+
+      const survBCache = new Map();
+      const getSurvB = (n) => {
+        if (!survBCache.has(n)) survBCache.set(n, binomSurvival(n, kB, p));
+        return survBCache.get(n);
+      };
+
+      const dualFineAt = (m, r) => {
+        let total = 0;
+        for (const t of termsA) {
+          if (t.i > m - 1) break;
+          total += t.prob * getSurvB((m - 1 - t.i) * 10 + r);
+        }
+        return clamp(total);
+      };
+
+      const mean = meanA + meanB;
+      let qIdx = 0;
+      const maxTotalSteps = 15000;
+
+      for (let m = 1; m <= maxTotalSteps && qIdx < res.length; m++) {
+        let cdf = 0;
+        for (const t of termsA) {
+          if (t.i > m) break;
+          const diff = m - t.i;
+          cdf += t.prob * (diff < cdfB.length ? cdfB[diff] : 1);
+        }
+
+        while (qIdx < res.length && cdf >= res[qIdx].q) {
+          let s = m * 10;
+          for (let r = 1; r < 10; r++) {
+            if (dualFineAt(m, r) >= res[qIdx].q) {
+              s = (m - 1) * 10 + r;
+              break;
+            }
+          }
+          res[qIdx].pulls = s;
+          res[qIdx].sets = Math.ceil(s / 10);
+          qIdx++;
+        }
+      }
+
+      for (const r of res) {
+        if (r.pulls === null) {
+          r.pulls = maxTotalSteps * 10;
+          r.sets = maxTotalSteps;
+        }
+      }
+
+      let probability = null;
+      if (tickets !== null) {
+        const base = Math.floor(tickets / 10) * 10;
+        const rem = tickets % 10;
+        const bSets = base / 10;
+
+        let prob = 0;
+        for (const t of termsA) {
+          if (t.i > bSets) break;
+          prob += t.prob * binomSurvival((bSets - t.i) * 10 + rem, kB, p);
+        }
+
+        const maxDeficit = Math.min(kA, rem - kB);
+        for (let a = 1; a <= maxDeficit; a++) {
+          prob += binomExact(base, kA - a, p) * binomSurvival(rem, a + kB, p);
+        }
+
+        probability = clamp(prob);
+      }
+
+      return { mean, probability, res };
+    }
+
     /* ==================================================
        H. 입력 검증
        ================================================== */
@@ -1365,6 +1591,11 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       eldine: "엘다인 획득 수",
       general: "일반 3성 획득 수",
       total3: "전체 3성 획득 수"
+    };
+
+    const GROUP_IDS = {
+      plan: ["planFaith", "planTickets", "planA", "planB"],
+      review: ["pulls", "eldine", "general", "total3"]
     };
 
     const lastAlert = { plan: "", review: "" };
@@ -1397,9 +1628,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     // 동일한 오류 팝업은 반복하지 않습니다.
     function showErrors(group, errors, popup = false) {
       const box = $(group + "Error");
-      const ids = group === "plan"
-        ? ["planFaith", "planTickets", "planA", "planB"]
-        : ["pulls", "eldine", "general", "total3"];
+      const ids = GROUP_IDS[group] || [];
 
       for (const id of ids) {
         $(id).removeAttribute("aria-invalid");
@@ -1430,17 +1659,33 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     // 복사 기능에서 사용할 최근의 유효한 계산 결과입니다.
     let lastPlan = null;
 
+    // 달성선 항목을 추가하거나 문구를 바꾸려면 이 목록을 수정합니다.
+    // 세 번째 값 1은 표에서 강조할 행(중앙값)을 뜻합니다.
+    const QUANTILES = [
+      ["상위 1%", .01],
+      ["상위 5%", .05],
+      ["상위 10%", .1],
+      ["상위 30%", .3],
+      ["상위 50% (중앙값)", .5, 1],
+      ["하위 30% (상위 70%)", .7],
+      ["하위 10% (상위 90%)", .9],
+      ["하위 5% (상위 95%)", .95],
+      ["하위 1% (상위 99%)", .99]
+    ];
+
     function calcPlan(popup = false) {
       const mode = currentMode;
-      const errors = numericErrors(
-        mode.allowDual
-          ? ["planFaith", "planTickets", "planA", "planB"]
-          : ["planFaith", "planTickets", "planA"]
-      );
+      const noFaith = $("planNoFaith").checked;
+      const checkIds = [];
+      if (!noFaith) checkIds.push("planFaith");
+      checkIds.push("planTickets", "planA");
+      if (mode.allowDual) checkIds.push("planB");
+
+      const errors = numericErrors(checkIds);
 
       const kA = int("planA");
       const kB = mode.allowDual ? int("planB") : 0;
-      const f = int("planFaith");
+      const f = noFaith ? 0 : int("planFaith");
       const tickets = $("planTickets").value.trim() === ""
         ? null
         : int("planTickets");
@@ -1472,37 +1717,32 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
       $("planResultCard").hidden = false;
 
-      const result = planDistribution(kA, kB, f, tickets, mode);
-      const { fine, mean, probability } = result;
-      lastPlan = { kA, kB, f, tickets, mode, result };
+      let mean, probability, res;
 
-      // 달성선 항목을 추가하거나 문구를 바꾸려면 이 목록을 수정합니다.
-      // 세 번째 값 1은 표에서 강조할 행을 뜻합니다.
-      const qs = [
-        ["상위 1%", .01],
-        ["상위 5%", .05],
-        ["상위 10%", .1],
-        ["상위 30%", .3],
-        ["상위 50% (중앙값)", .5, 1],
-        ["하위 30% (상위 70%)", .7],
-        ["하위 10% (상위 90%)", .9],
-        ["하위 5% (상위 95%)", .95],
-        ["하위 1% (상위 99%)", .99]
-      ];
+      if (noFaith) {
+        const result = planDistributionNoFaith(kA, kB, tickets, mode);
+        ({ mean, probability, res } = result);
+        lastPlan = { kA, kB, f, tickets, mode, noFaith, result };
+      } else {
+        const result = planDistribution(kA, kB, f, tickets, mode);
+        const { fine } = result;
+        ({ mean, probability } = result);
+        lastPlan = { kA, kB, f, tickets, mode, noFaith, result };
 
-      // 해당 확률에 처음 도달하는 횟수를 찾습니다.
-      // 횟수는 정수 그대로, 세트 수는 올림합니다.
-      const res = qs.map(([label, p, hl]) => {
-        let s = 0;
-        while (s < fine.length - 1 && fine[s] < p) s++;
+        // 해당 확률에 처음 도달하는 횟수를 찾습니다.
+        // 횟수는 정수 그대로, 세트 수는 올림합니다.
+        res = QUANTILES.map(([label, p, hl]) => {
+          let s = 0;
+          while (s < fine.length - 1 && fine[s] < p) s++;
 
-        return {
-          label,
-          hl,
-          pulls: s,
-          sets: Math.ceil(s / 10)
-        };
-      });
+          return {
+            label,
+            hl,
+            pulls: s,
+            sets: Math.ceil(s / 10)
+          };
+        });
+      }
 
       // 평균은 표시할 때만 반올림합니다.
       $("planMean").textContent =
@@ -1560,10 +1800,10 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     function copyPlanResult() {
       if (!calcPlan(true)) return;
 
-      const { kA, kB, f, tickets, mode } = lastPlan;
-      let t = `[${mode.name} 픽업 견적 결과]\n`;
+      const { kA, kB, f, tickets, mode, noFaith } = lastPlan;
+      let t = `[${mode.name} 픽업 견적 결과${noFaith ? " · 신앙심 미사용" : ""}]\n`;
 
-      if (f > 0) {
+      if (!noFaith && f > 0) {
         t += `보유 신앙심: ${f} Pt\n`;
       }
 
@@ -1575,10 +1815,14 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       if (mode.allowDual) {
         t += `목표: 엘다인 A ${kA}개`;
         t += kB > 0 ? `, 엘다인 B ${kB}개\n` : "\n";
-        t += "전략: A 완성 후 B, 10연 우선·잔여 모집권은 단챠\n";
+        t += noFaith
+          ? "전략: 신앙심 미사용 (순수 확률), A 완성 후 B, 10연 우선·잔여 모집권은 단챠\n"
+          : "전략: A 완성 후 B, 10연 우선·잔여 모집권은 단챠\n";
       } else {
         t += `목표: 일반 사도 ${kA}개\n`;
-        t += "전략: 단일 픽업 (200Pt 교환), 10연 우선·잔여 모집권은 단챠\n";
+        t += noFaith
+          ? "전략: 신앙심 미사용 (순수 확률), 단일 픽업, 10연 우선·잔여 모집권은 단챠\n"
+          : "전략: 단일 픽업 (200Pt 교환), 10연 우선·잔여 모집권은 단챠\n";
       }
       t += `평균 기댓값(10연): ${$("planMean").textContent}\n`;
       t += `중앙값: ${$("planMedian").textContent}\n\n`;
@@ -1588,19 +1832,23 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
         t += `${d[0].textContent}: ${d[1].textContent} (${d[2].textContent})\n`;
       });
 
+      copyText(t);
+    }
+
+    function copyText(text) {
       if (!navigator.clipboard) {
-        prompt("아래 텍스트를 직접 복사해주세요.", t);
+        prompt("아래 텍스트를 직접 복사해주세요.", text);
         return;
       }
 
-      navigator.clipboard.writeText(t)
+      navigator.clipboard.writeText(text)
         .then(() => {
           alert("견적 결과가 클립보드에 복사되었습니다!");
         })
         .catch(() => {
           prompt(
             "자동 복사에 실패했습니다. 아래 텍스트를 직접 복사해주세요.",
-            t
+            text
           );
         });
     }
@@ -1788,6 +2036,9 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
     for (const id of ["planFaith", "planTickets", "planA", "planB"]) {
       $(id).addEventListener("input", () => {
+        if (id === "planFaith" && !$("planFaith").disabled) {
+          savedPlanFaith = $("planFaith").value;
+        }
         if (id === "planA" || id === "planB") {
           setCustom();
         }
@@ -1795,9 +2046,17 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       });
 
       $(id).addEventListener("change", () => {
+        if (id === "planFaith" && !$("planFaith").disabled) {
+          savedPlanFaith = $("planFaith").value;
+        }
         calcPlan(true);
       });
     }
+
+    $("planNoFaith").addEventListener("change", () => {
+      updatePlanFaithUi();
+      calcPlan();
+    });
 
     for (const id of ["pulls", "eldine", "general", "total3"]) {
       $(id).addEventListener("input", () => {
