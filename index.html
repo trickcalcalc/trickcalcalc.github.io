@@ -1,0 +1,1549 @@
+<!doctype html>
+<html lang="ko">
+<!--
+엘다인 픽업 견적 & 비틱 계산기 — 유지보수 안내
+
+[수정할 부분 찾기]
+A. 디자인 설정       : 색상, 글자 크기, 간격, 모바일/PC 배치
+B. 견적 입력 화면    : 신앙심, 모집권, 목표 개수 입력란
+C. 견적 결과 화면    : 평균, 중앙값, 달성 확률, 달성선 표
+D. 사후 운 검증 화면 : 획득 수 입력란과 결과 카드
+E. 기본값과 프리셋   : 픽업 확률 P, 목표 프리셋 PRESETS
+F. 확률 계산         : binomExact, binomSurvival
+G. 목표 달성 계산    : advancePlan, progressCdf, planDistribution
+H. 입력 검증         : numericErrors, showErrors
+I. 견적 출력과 복사  : calcPlan, copyPlanResult
+J. 사후 운 평가      : gradeFor, fillSection, calcReview
+K. 이벤트 연결       : 입력 변경 시 실행할 함수
+
+[계산 조건]
+- 뽑기 1회마다 신앙심 1Pt를 얻고 300Pt로 엘다인 1개를 교환합니다.
+- 신앙심 교환 외에 별도의 300회 보너스를 추가하지 않습니다.
+- 듀얼은 A를 먼저 완성하고 B로 전환합니다.
+- 10연차 도중에는 배너를 바꾸지 않습니다.
+- 달성선 횟수는 1회 단위, 세트 수는 올림하여 표시합니다.
+- 보유 모집권의 마지막 1-9회는 단챠로 계산합니다.
+- 평균 필요 횟수는 실제 10연차 단위 소모량의 기댓값입니다.
+
+[수정 시 확인]
+- HTML의 id를 변경하면 JavaScript의 참조도 함께 바꿔야 합니다.
+- 확률을 변경하면 화면 설명과 사후 평가 확률도 함께 확인하세요.
+- 신앙심 교환 기준 300이나 세트 크기 10을 바꾸려면 관련 계산 전체를 점검해야 합니다.
+-->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>엘다인 픽업 견적&amp;비틱 계산기</title>
+
+  <style>
+    /* ==================================================
+       A. 디자인 설정
+       공통 색상은 아래 CSS 변수에서 수정합니다.
+       ================================================== */
+
+    :root {
+      --bg: #faf8f5;
+      --card: #fff;
+      --border: #e5e1d8;
+      --text: #1a1a1a;
+      --sub: #6b6558;
+      --accent: #2c5aa0;
+      --accent-bg: #eaf1fb;
+      --header-bg: #efece6;
+      --error: #b42318;
+      --error-bg: #fff0ee;
+    }
+
+    /* 기기의 다크 모드 설정에 따라 색상을 변경합니다. */
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #171613;
+        --card: #211f1b;
+        --border: #39362e;
+        --text: #f2efe8;
+        --sub: #a39d8c;
+        --accent: #7fb0f0;
+        --accent-bg: #1d2c40;
+        --header-bg: #2a2721;
+        --error: #ffb4aa;
+        --error-bg: #3b2320;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family:
+        -apple-system, BlinkMacSystemFont,
+        "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      padding:
+        calc(env(safe-area-inset-top, 0px) + 12px)
+        12px
+        calc(env(safe-area-inset-bottom, 0px) + 24px);
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .wrap {
+      max-width: 460px;
+      margin: auto;
+    }
+
+    h1 {
+      font-size: 1.3rem;
+      margin: 0 0 6px;
+      font-weight: 800;
+    }
+
+    .desc {
+      color: var(--sub);
+      font-size: .82rem;
+      margin: 0 0 14px;
+      line-height: 1.45;
+    }
+
+    /* 상단 탭 */
+    .tabs {
+      display: flex;
+      gap: 6px;
+      background: var(--border);
+      padding: 4px;
+      border-radius: 12px;
+      margin-bottom: 14px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 10px 0;
+      border: 0;
+      background: transparent;
+      color: var(--sub);
+      font-weight: 700;
+      font-size: .88rem;
+      border-radius: 9px;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      background: var(--card);
+      color: var(--text);
+      box-shadow: 0 2px 5px #0001;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* 입력 카드와 입력란 */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: .82rem;
+      color: var(--sub);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1rem;
+      -moz-appearance: textfield;
+    }
+
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .sub-label {
+      font-size: .72rem;
+      color: var(--sub);
+      font-weight: 400;
+    }
+
+    /* 목표 프리셋 버튼 */
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .btn-preset {
+      padding: 8px 2px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: .73rem;
+      font-weight: 600;
+      cursor: pointer;
+      line-height: 1.25;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 54px;
+      text-align: center;
+    }
+
+    .btn-preset:hover,
+    .btn-preset.active {
+      background: var(--accent-bg);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .btn-custom-row {
+      grid-column: 1 / -1;
+      padding: 10px 0;
+      font-size: .82rem;
+      font-weight: 700;
+      min-height: auto;
+      flex-direction: row;
+    }
+
+    .check-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .8rem;
+      color: var(--sub);
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    /* 결과 카드 */
+    .result-card {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .result-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .result-section:last-child {
+      border: 0;
+    }
+
+    .rs-title {
+      font-size: .82rem;
+      font-weight: 700;
+      color: var(--sub);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .rs-main {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .pct-big {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    .grade {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: .72rem;
+      font-weight: 700;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .stat {
+      background: var(--accent-bg);
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+
+    .stat .k {
+      font-size: .68rem;
+      color: var(--sub);
+    }
+
+    .stat .v {
+      font-size: .95rem;
+      font-weight: 800;
+    }
+
+    /* 보유 자원 성공 확률 */
+    .my-prob-box {
+      margin-top: 10px;
+      padding: 12px 14px;
+      background: var(--accent-bg);
+      border: 1.5px solid var(--accent);
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .my-prob-box .title {
+      font-size: .78rem;
+      font-weight: 800;
+    }
+
+    .my-prob-box .sub {
+      font-size: .72rem;
+      color: var(--sub);
+      margin-top: 2px;
+    }
+
+    .my-prob-box .val {
+      font-size: 1.65rem;
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    /* 달성선 표 */
+    .pct-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .78rem;
+      margin-top: 10px;
+    }
+
+    .pct-table th,
+    .pct-table td {
+      padding: 7px 8px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .pct-table th {
+      color: var(--sub);
+      font-weight: 600;
+      background: var(--header-bg);
+    }
+
+    .pct-table tr.highlight {
+      background: var(--accent-bg);
+      font-weight: 700;
+    }
+
+    .btn-copy {
+      width: 100%;
+      padding: 11px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      font-size: .88rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 12px;
+    }
+
+    .footer {
+      color: var(--sub);
+      font-size: .72rem;
+      text-align: center;
+      margin-top: 16px;
+      line-height: 1.5;
+    }
+
+    .note {
+      font-size: .7rem;
+      color: var(--accent);
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+
+    input[disabled] {
+      opacity: .6;
+    }
+
+    /* 입력 오류 표시 */
+    .error-box {
+      padding: 10px 12px;
+      background: var(--error-bg);
+      border: 1px solid var(--error);
+      border-radius: 10px;
+      color: var(--error);
+      font-size: .8rem;
+      line-height: 1.5;
+      margin-top: 12px;
+      white-space: pre-line;
+    }
+
+    [aria-invalid="true"] {
+      border-color: var(--error) !important;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    /* 너비 768px 이상에서는 입력과 결과를 좌우로 배치합니다. */
+    @media (min-width: 768px) {
+      body {
+        padding: 36px 20px 48px;
+      }
+
+      .wrap {
+        max-width: 860px;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      .desc {
+        font-size: .9rem;
+        margin-bottom: 18px;
+      }
+
+      #tab-plan.active,
+      #tab-review.active {
+        display: grid;
+        grid-template-columns: 1fr 1.05fr;
+        gap: 16px;
+        align-items: start;
+      }
+
+      .card {
+        margin-bottom: 0;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>엘다인 픽업 견적&amp;비틱 계산기</h1>
+    <p class="desc">
+      확률 0.6% / 신앙심 300Pt로 1개 교환 / 10연 우선, 남은 모집권은 단챠
+    </p>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('plan')">
+        🎯 목표 견적기
+      </button>
+      <button class="tab-btn" onclick="switchTab('review')">
+        📊 사후 운 검증기
+      </button>
+    </div>
+
+    <!-- B. 견적 입력 화면: 프리셋 버튼은 PRESETS에서 자동 생성합니다. -->
+    <div id="tab-plan" class="tab-content active">
+      <div class="card">
+        <label>목표 프리셋</label>
+        <div class="preset-grid" id="presetGrid"></div>
+
+        <div class="field">
+          <label for="planFaith">
+            보유 신앙심
+            <span class="sub-label">(시작 포인트, 300Pt = 1개 교환)</span>
+          </label>
+          <input
+            type="number" id="planFaith" value="0"
+            min="0" step="1" placeholder="예: 150" inputmode="numeric"
+          >
+        </div>
+
+        <div class="field">
+          <label for="planTickets">
+            보유 모집권 수량
+            <span class="sub-label">(1000엘리프 당 10회)</span>
+          </label>
+          <input
+            type="number" id="planTickets" min="0" step="1"
+            placeholder="예: 459 (입력 시 내 성공 확률 계산)"
+            inputmode="numeric"
+          >
+        </div>
+
+        <div class="field">
+          <label for="planA">엘다인 A 목표 개수</label>
+          <input
+            type="number" id="planA" value="7"
+            min="0" step="1" inputmode="numeric"
+          >
+        </div>
+
+        <div>
+          <label for="planB">
+            엘다인 B 목표 개수
+            <span class="sub-label">(듀얼 가챠 시만 입력, 단일은 0)</span>
+          </label>
+          <input
+            type="number" id="planB" value="0"
+            min="0" step="1" inputmode="numeric"
+          >
+        </div>
+
+        <p class="note">
+          ※ 듀얼은 A를 먼저 완성한 뒤 B로 전환합니다.
+          자연 획득분과 신앙심으로 A를 완성할 수 있으면 필요한 만큼 교환합니다.<br>
+          ※ 보유 모집권이 1-9개 남으면 단챠로 진행하고 매회 전환 여부를 확인합니다.
+        </p>
+        <div id="planError" class="error-box" role="alert" hidden></div>
+      </div>
+
+      <!-- C. 견적 결과 화면: 숫자는 calcPlan에서 갱신합니다. -->
+      <div class="card result-card" id="planResultCard">
+        <div class="result-section">
+          <div class="rs-title">
+            <span class="dot" style="background:#2c5aa0"></span>
+            견적 요약 (신앙심 교환 반영)
+          </div>
+
+          <div class="stat-grid">
+            <div class="stat">
+              <div class="k">평균 필요 뽑기 (10연 기준)</div>
+              <div class="v" id="planMean">-</div>
+            </div>
+            <div class="stat">
+              <div class="k">중앙값 (50% 달성선)</div>
+              <div class="v" id="planMedian">-</div>
+            </div>
+          </div>
+
+          <p class="note">
+            달성선은 1회 단위로 계산하고 세트 수는 올림합니다.
+            A 완료 후 배너 전환은 다음 세트부터입니다.
+            평균은 10연 소모량 기준이며, 보유 자원 확률은 마지막 단챠까지 반영합니다.
+          </p>
+
+          <div class="my-prob-box" id="myProbBox" hidden>
+            <div>
+              <div class="title">🎯 내 보유 자원 목표 달성 확률</div>
+              <div class="sub" id="myProbSub"></div>
+            </div>
+            <div class="val" id="myProbVal"></div>
+          </div>
+        </div>
+
+        <div class="result-section">
+          <div class="rs-title">
+            <span class="dot" style="background:#27ae60"></span>
+            운의 편차별 세부 달성선
+          </div>
+
+          <table class="pct-table">
+            <thead>
+              <tr>
+                <th>구분</th>
+                <th>필요 횟수</th>
+                <th>세트 수 (10연)</th>
+              </tr>
+            </thead>
+            <tbody id="pctTableBody"></tbody>
+          </table>
+
+          <button class="btn-copy" onclick="copyPlanResult()">
+            📋 결과 텍스트 복사
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- D. 사후 운 검증 화면: 입력 및 결과 카드 -->
+    <div id="tab-review" class="tab-content">
+      <div class="card">
+        <div class="field">
+          <label for="pulls">전체 가챠 횟수</label>
+          <input
+            type="number" id="pulls" min="0" step="1"
+            placeholder="예: 600" inputmode="numeric"
+          >
+        </div>
+
+        <div class="field">
+          <label for="eldine">
+            엘다인 획득 수
+            <span class="sub-label">(확률 0.6%)</span>
+          </label>
+          <input
+            type="number" id="eldine" min="0" step="1"
+            placeholder="예: 4" inputmode="numeric"
+          >
+          <label class="check-label">
+            <input type="checkbox" id="includeCeil">
+            300회마다 신앙심을 즉시 교환했다고 가정 (자동 차감)
+          </label>
+          <div class="note">
+            체크 시 시작 신앙심 0, 교환분을 포함한 획득 수를 입력하세요.
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="general">
+            일반 3성 획득 수
+            <span class="sub-label">(확률 2.4%)</span>
+          </label>
+          <input
+            type="number" id="general" min="0" step="1"
+            placeholder="예: 15" inputmode="numeric"
+          >
+        </div>
+
+        <div>
+          <label for="total3">
+            전체 3성 획득 수
+            <span class="sub-label">(확률 3.0%)</span>
+          </label>
+          <input
+            type="number" id="total3" min="0" step="1"
+            placeholder="예: 19" inputmode="numeric"
+          >
+          <div class="note" id="autoNote" hidden>
+            ※ 엘다인 + 일반3성 합계로 자동 계산됨 (미입력은 0)
+          </div>
+        </div>
+
+        <div id="reviewError" class="error-box" role="alert" hidden></div>
+      </div>
+
+      <!--
+      세 결과 영역은 같은 부모 아래에 둡니다.
+      exactGeneral 등 JavaScript가 참조하는 결과 id를 삭제하지 마세요.
+      -->
+      <div class="card result-card" id="reviewResultCard" hidden>
+        <div class="result-section" id="secEldine">
+          <div class="rs-title">
+            <span class="dot" style="background:#2c5aa0"></span>
+            엘다인 (0.6%) 운 평가
+          </div>
+          <div class="rs-main">
+            <span class="pct-big" id="pctEldine">-</span>
+            <span class="grade" id="gradeEldine"></span>
+          </div>
+          <div class="stat-grid">
+            <div class="stat">
+              <div class="k">순수 기댓값</div>
+              <div class="v" id="meanEldine">-</div>
+            </div>
+            <div class="stat">
+              <div class="k">정확히 이 개수일 확률</div>
+              <div class="v" id="exactEldine">-</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="result-section" id="secGeneral" hidden>
+          <div class="rs-title">
+            <span class="dot" style="background:#27ae60"></span>
+            일반 3성 (2.4%) 운 평가
+          </div>
+          <div class="rs-main">
+            <span class="pct-big" id="pctGeneral">-</span>
+            <span class="grade" id="gradeGeneral"></span>
+          </div>
+          <div class="stat-grid">
+            <div class="stat">
+              <div class="k">순수 기댓값</div>
+              <div class="v" id="meanGeneral">-</div>
+            </div>
+            <div class="stat">
+              <div class="k">정확히 이 개수일 확률</div>
+              <div class="v" id="exactGeneral">-</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="result-section" id="secTotal" hidden>
+          <div class="rs-title">
+            <span class="dot" style="background:#d35400"></span>
+            전체 3성 (3.0%) 운 평가
+          </div>
+          <div class="rs-main">
+            <span class="pct-big" id="pctTotal">-</span>
+            <span class="grade" id="gradeTotal"></span>
+          </div>
+          <div class="stat-grid">
+            <div class="stat">
+              <div class="k">순수 기댓값</div>
+              <div class="v" id="meanTotal">-</div>
+            </div>
+            <div class="stat">
+              <div class="k">정확히 이 개수일 확률</div>
+              <div class="v" id="exactTotal">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 하단 안내 및 방문자 배지 -->
+    <div class="footer">
+      * 픽업 0.6% / 일반 3성 2.4% / 전체 3성 3.0%<br>
+      * 공유 신앙심 반영 / A 우선 전략 / 보유 자원은 마지막 단챠 포함<br>
+      * 사후 운 평가는 해당 획득 수 이상을 얻을 확률입니다.
+    </div>
+    <div style="text-align:center;margin-top:12px">
+      <img
+        src="https://hits.sh/paste.page/trickcal.svg?view=today-total&amp;style=flat-square&amp;label=방문자&amp;color=2c5aa0"
+        alt="방문자수"
+      >
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+
+    /* ==================================================
+       E. 기본값과 프리셋
+       ================================================== */
+
+    // P: 엘다인 픽업 확률. 0.006 = 0.6%.
+    const $ = (id) => document.getElementById(id);
+    const P = 0.006;
+
+    // 빈 입력은 0으로 해석합니다.
+    // 정수가 아닌 입력은 numericErrors에서 거부합니다.
+    const int = (id) => Number($(id).value.trim() || 0);
+
+    // 부동소수점 오차로 확률이 0-1 범위를 벗어나지 않도록 제한합니다.
+    const clamp = (x) => Math.max(0, Math.min(1, x));
+
+    // [A 목표, B 목표, 버튼 문구, 기본 선택 여부]
+    // 엘시드 사용 시 필요한 개수가 줄어든 목표를 직접 지정합니다.
+    const PRESETS = [
+      [6, 0, "단일 A2<br>(6개, 엘시드 사용)"],
+      [7, 0, "단일 A2<br>(7개)", 1],
+      [9, 0, "단일 A3<br>(9개, 엘시드 사용)"],
+      [10, 0, "단일 A3<br>(10개)"],
+      [6, 6, "A2+A2<br>(12개, 엘시드 사용)"],
+      [7, 7, "A2+A2<br>(14개)"],
+      [10, 7, "A3+A2<br>(17개)"],
+      [9, 9, "A3+A3<br>(18개, 엘시드 사용)"],
+      [10, 10, "A3+A3<br>(20개)"]
+    ];
+
+    // 프리셋 목록을 화면의 버튼으로 만듭니다.
+    for (const [a, b, t, on] of PRESETS) {
+      const x = document.createElement("button");
+      x.className = "btn-preset" + (on ? " active" : "");
+      x.innerHTML = t;
+      x.onclick = () => setPreset(a, b, x);
+      $("presetGrid").appendChild(x);
+    }
+
+    const custom = document.createElement("button");
+    custom.className = "btn-preset btn-custom-row";
+    custom.id = "btnCustom";
+    custom.textContent = "✏️ 직접 입력 (자유 선택)";
+    custom.onclick = () => {
+      setCustom();
+      $("planA").focus();
+      $("planA").select();
+    };
+    $("presetGrid").appendChild(custom);
+
+    // 탭 버튼 강조와 실제 화면을 함께 전환합니다.
+    function switchTab(t) {
+      document.querySelectorAll(".tab-btn").forEach((b, i) => {
+        b.classList.toggle(
+          "active",
+          (t === "plan" && i === 0) || (t === "review" && i === 1)
+        );
+      });
+      $("tab-plan").classList.toggle("active", t === "plan");
+      $("tab-review").classList.toggle("active", t === "review");
+    }
+
+    // 목표를 직접 수정하면 프리셋 선택을 해제합니다.
+    function setCustom() {
+      document.querySelectorAll(".btn-preset").forEach((x) => {
+        x.classList.remove("active");
+      });
+      $("btnCustom").classList.add("active");
+    }
+
+    // 프리셋의 목표를 입력란에 넣고 다시 계산합니다.
+    function setPreset(a, b, x) {
+      document.querySelectorAll(".btn-preset").forEach((y) => {
+        y.classList.remove("active");
+      });
+      x.classList.add("active");
+      $("planA").value = a;
+      $("planB").value = b;
+      calcPlan();
+    }
+
+    /* ==================================================
+       F. 확률 계산
+       ================================================== */
+
+    // 큰 횟수의 이항확률 계산에 필요한 log(감마 함수).
+    // Lanczos 근사식을 사용합니다.
+    function logGamma(z) {
+      const c = [
+        676.5203681218851,
+        -1259.1392167224028,
+        771.32342877765313,
+        -176.61502916214059,
+        12.507343278686905,
+        -0.13857109526572012,
+        9.984369578019572e-6,
+        1.5056327351493116e-7
+      ];
+
+      z -= 1;
+      let x = 0.99999999999980993;
+
+      for (let i = 0; i < c.length; i++) {
+        x += c[i] / (z + i + 1);
+      }
+
+      const t = z + 7.5;
+      return 0.9189385332046727
+        + (z + 0.5) * Math.log(t)
+        - t
+        + Math.log(x);
+    }
+
+    // n회 중 정확히 k개를 얻을 확률 P(X = k).
+    // 작은 조합은 로그 합, 큰 조합은 logGamma로 계산합니다.
+    function binomExact(n, k, p) {
+      if (k < 0 || k > n) return 0;
+      if (p === 0) return k === 0 ? 1 : 0;
+      if (p === 1) return k === n ? 1 : 0;
+
+      const m = Math.min(k, n - k);
+      let choose = 0;
+
+      if (m < 256) {
+        for (let j = 1; j <= m; j++) {
+          choose += Math.log(n - j + 1) - Math.log(j);
+        }
+      } else {
+        choose = logGamma(n + 1)
+          - logGamma(k + 1)
+          - logGamma(n - k + 1);
+      }
+
+      return clamp(
+        Math.exp(
+          choose + k * Math.log(p) + (n - k) * Math.log1p(-p)
+        )
+      );
+    }
+
+    // n회 중 k개 이상 얻을 확률 P(X >= k).
+    // 평균의 위/아래에 따라 합산 방향을 선택합니다.
+    // P(X=0)부터 시작하지 않아 큰 n에서 발생하는 확률 소실을 줄입니다.
+    function binomSurvival(n, k, p) {
+      if (k <= 0) return 1;
+      if (k > n) return 0;
+      if (p === 0) return 0;
+      if (p === 1) return 1;
+
+      let t, s;
+
+      if (k > n * p) {
+        t = s = binomExact(n, k, p);
+
+        for (let j = k; j < n; j++) {
+          t *= ((n - j) / (j + 1)) * p / (1 - p);
+          s += t;
+          if (t <= s * 1e-16) break;
+        }
+
+        return clamp(s);
+      }
+
+      t = s = binomExact(n, k - 1, p);
+
+      for (let j = k - 1; j > 0; j--) {
+        t *= j / (n - j + 1) * (1 - p) / p;
+        s += t;
+        if (t <= s * 1e-16) break;
+      }
+
+      return clamp(1 - s);
+    }
+
+    // 10연차에서 자연 획득 0-10개의 확률.
+    // 누적 반올림 오차를 줄이기 위해 합을 1로 정규화합니다.
+    const STEP_PMF = Float64Array.from(
+      { length: 11 },
+      (_, i) => binomExact(10, i, P)
+    );
+    const stepMass = STEP_PMF.reduce((a, b) => a + b, 0);
+
+    for (let i = 0; i < 11; i++) {
+      STEP_PMF[i] /= stepMass;
+    }
+
+    /* ==================================================
+       G. 목표 달성 계산
+       ================================================== */
+
+    /*
+    한 번의 10연차 또는 단챠 이후 상태를 계산합니다.
+    size에는 10 또는 1만 전달합니다.
+
+    state.mass[a * (kB + 1) + b]
+      자연 획득 후 A/B 부족분이 a/b인 미완료 경로의 확률입니다.
+      A 완료 후에도 교환에 배정한 부족분 a를 남겨
+      공유 신앙심이 B에 중복 사용되지 않도록 합니다.
+
+    state.done
+      이미 두 목표를 모두 달성한 확률입니다.
+
+    n: 지금까지 뽑은 횟수
+    f: 시작 신앙심
+    before/after: 뽑기 전후의 누적 교환 가능 개수
+    */
+    function advancePlan(state, n, size, kA, kB, f) {
+      const w = kB + 1;
+      const next = new Float64Array(state.mass.length);
+      const before = Math.floor((f + n) / 300);
+      const after = Math.floor((f + n + size) / 300);
+      const pmf = size === 10 ? STEP_PMF : [1 - P, P];
+
+      let done = state.done;
+
+      for (let a = 0; a <= kA; a++) {
+        for (let b = 0; b <= kB; b++) {
+          const mass = state.mass[a * w + b];
+          if (!mass) continue;
+
+          // A 부족분을 신앙심으로 채울 수 없다면 A를 계속 뽑습니다.
+          // 배너 선택은 이번 세트가 시작할 때 한 번만 합니다.
+          const drawA = a > before;
+
+          for (let d = 0; d < pmf.length; d++) {
+            const aa = drawA ? Math.max(0, a - d) : a;
+            const bb = drawA ? b : Math.max(0, b - d);
+            const q = mass * pmf[d];
+
+            if (aa + bb <= after) {
+              done += q;
+            } else {
+              next[aa * w + bb] += q;
+            }
+          }
+        }
+      }
+
+      return { mass: next, done: clamp(done) };
+    }
+
+    /*
+    달성선 표시용으로 세트 내부의 확률을 계산합니다.
+
+    세트 시작 상태에서 같은 배너를 r회 더 뽑습니다.
+    도중에 A가 완성되어도 B로 바꾸지 않습니다.
+    다음 세트의 상태는 advancePlan(size=10)으로 별도 계산합니다.
+    */
+    function progressCdf(state, n, r, kA, kB, f) {
+      const before = Math.floor((f + n) / 300);
+      const after = Math.floor((f + n + r) / 300);
+      const w = kB + 1;
+
+      let done = state.done;
+
+      for (let a = 0; a <= kA; a++) {
+        for (let b = 0; b <= kB; b++) {
+          const mass = state.mass[a * w + b];
+
+          // 뽑지 않는 배너는 신앙심으로 부족분을 충당할 수 있어야 합니다.
+          if (!mass || (a > before ? b : a) > after) continue;
+
+          const need = Math.max(0, a + b - after);
+          if (need <= r) {
+            done += mass * TAIL_SURV[r][need];
+          }
+        }
+      }
+
+      return clamp(done);
+    }
+
+    // 세트 내부 r회에서 k개 이상 획득할 확률을 미리 계산합니다.
+    const TAIL_SURV = Array.from({ length: 10 }, (_, r) =>
+      Array.from({ length: r + 1 }, (_, k) =>
+        binomSurvival(r, k, P)
+      )
+    );
+
+    /*
+    반환값:
+      cdf         : 10회 단위 목표 달성 확률
+      fine        : 배너 전환을 세트 경계로 고정한 1회 단위 달성 확률
+      mean        : 10연차 단위 실제 소모량의 평균
+      probability : 보유 모집권 사용 시 성공 확률
+
+    probability의 마지막 단챠에서는 매회 배너 전환이 가능합니다.
+    fine의 세트 내부 계산과는 이 조건이 다릅니다.
+    */
+    function planDistribution(kA, kB, f, tickets = null) {
+      const total = kA + kB;
+
+      // 신앙심 교환만으로도 목표를 채우는 시점까지 계산합니다.
+      const steps = Math.ceil(Math.max(0, 300 * total - f) / 10);
+      const cdf = new Float64Array(steps + 1);
+      const fine = new Float64Array(steps * 10 + 1);
+
+      let state = {
+        mass: new Float64Array((kA + 1) * (kB + 1)),
+        done: f >= 300 * total ? 1 : 0
+      };
+
+      if (!state.done) {
+        state.mass[kA * (kB + 1) + kB] = 1;
+      }
+
+      cdf[0] = fine[0] = state.done;
+
+      let probability = tickets === null
+        ? null
+        : tickets >= steps * 10 ? 1 : null;
+
+      const base = tickets === null
+        ? -1
+        : Math.floor(tickets / 10) * 10;
+
+      const remaining = tickets === null ? 0 : tickets % 10;
+
+      // 마지막 단챠는 별도 경로에서 계산합니다.
+      // 기존 10연차 분포를 바꾸지 않고 성공 확률만 저장합니다.
+      function capture(n) {
+        if (
+          tickets === null ||
+          n !== base ||
+          probability !== null
+        ) return;
+
+        let tail = state;
+
+        for (let j = 0; j < remaining; j++) {
+          tail = advancePlan(tail, n + j, 1, kA, kB, f);
+        }
+
+        probability = tail.done;
+      }
+
+      capture(0);
+
+      for (let i = 1; i <= steps; i++) {
+        for (let r = 1; r < 10; r++) {
+          fine[(i - 1) * 10 + r] = progressCdf(
+            state, (i - 1) * 10, r, kA, kB, f
+          );
+        }
+
+        state = advancePlan(
+          state, (i - 1) * 10, 10, kA, kB, f
+        );
+
+        if (i === steps) state.done = 1;
+
+        cdf[i] = fine[i * 10] = state.done;
+        capture(i * 10);
+      }
+
+      // E[T] = 10 × sum(P(T > 10i))
+      // 각 세트를 추가로 뽑아야 할 확률을 합산합니다.
+      let mean = 0;
+
+      for (let i = 0; i < steps; i++) {
+        mean += (1 - cdf[i]) * 10;
+      }
+
+      return { cdf, fine, mean, probability };
+    }
+
+    /* ==================================================
+       H. 입력 검증
+       ================================================== */
+
+    // 오류 메시지에 표시할 입력란 이름입니다.
+    const FIELDS = {
+      planFaith: "보유 신앙심",
+      planTickets: "보유 모집권",
+      planA: "엘다인 A 목표",
+      planB: "엘다인 B 목표",
+      pulls: "전체 가챠 횟수",
+      eldine: "엘다인 획득 수",
+      general: "일반 3성 획득 수",
+      total3: "전체 3성 획득 수"
+    };
+
+    const lastAlert = { plan: "", review: "" };
+
+    // 음수, 소수, 비정상 입력 및 안전한 정수 범위를 벗어난 값을 거부합니다.
+    function numericErrors(ids) {
+      const errors = [];
+
+      for (const id of ids) {
+        const e = $(id);
+        const raw = e.value.trim();
+        const value = Number(raw || 0);
+
+        if (
+          e.validity.badInput ||
+          !Number.isSafeInteger(value) ||
+          value < 0
+        ) {
+          errors.push([
+            id,
+            `${FIELDS[id]}: 0 이상의 정수를 입력해주세요.`
+          ]);
+        }
+      }
+
+      return errors;
+    }
+
+    // 입력 중에는 화면 안내, 입력 확정 시에는 팝업도 표시합니다.
+    // 동일한 오류 팝업은 반복하지 않습니다.
+    function showErrors(group, errors, popup = false) {
+      const box = $(group + "Error");
+      const ids = group === "plan"
+        ? ["planFaith", "planTickets", "planA", "planB"]
+        : ["pulls", "eldine", "general", "total3"];
+
+      for (const id of ids) {
+        $(id).removeAttribute("aria-invalid");
+      }
+
+      for (const [id] of errors) {
+        $(id).setAttribute("aria-invalid", "true");
+      }
+
+      const message = errors.map((x) => x[1]).join("\n");
+      box.textContent = message;
+      box.hidden = !message;
+
+      if (!message) lastAlert[group] = "";
+
+      if (message && popup && lastAlert[group] !== message) {
+        lastAlert[group] = message;
+        alert("입력 오류\n\n" + message);
+      }
+
+      return errors.length > 0;
+    }
+
+    /* ==================================================
+       I. 견적 출력과 복사
+       ================================================== */
+
+    // 복사 기능에서 사용할 최근의 유효한 계산 결과입니다.
+    let lastPlan = null;
+
+    function calcPlan(popup = false) {
+      const errors = numericErrors([
+        "planFaith", "planTickets", "planA", "planB"
+      ]);
+
+      const kA = int("planA");
+      const kB = int("planB");
+      const f = int("planFaith");
+      const tickets = $("planTickets").value.trim() === ""
+        ? null
+        : int("planTickets");
+
+      if (!errors.length && kA + kB === 0) {
+        errors.push([
+          "planA",
+          "A 또는 B 목표를 1개 이상 입력해주세요."
+        ]);
+      }
+
+      // 목표 합계 100은 게임 규칙이 아닌 브라우저 계산량 제한입니다.
+      if (!errors.length && kA + kB > 100) {
+        errors.push([
+          "planA",
+          "이 계산기는 A와 B 목표 합계 100개까지 지원합니다."
+        ]);
+      }
+
+      if (showErrors("plan", errors, popup)) {
+        $("planResultCard").hidden = true;
+        lastPlan = null;
+        return false;
+      }
+
+      $("planResultCard").hidden = false;
+
+      const result = planDistribution(kA, kB, f, tickets);
+      const { fine, mean, probability } = result;
+      lastPlan = { kA, kB, f, tickets, result };
+
+      // 달성선 항목을 추가하거나 문구를 바꾸려면 이 목록을 수정합니다.
+      // 세 번째 값 1은 표에서 강조할 행을 뜻합니다.
+      const qs = [
+        ["상위 1%", .01],
+        ["상위 5%", .05],
+        ["상위 10%", .1],
+        ["상위 30%", .3],
+        ["상위 50% (중앙값)", .5, 1],
+        ["하위 30% (상위 70%)", .7],
+        ["하위 10% (상위 90%)", .9],
+        ["하위 5% (상위 95%)", .95],
+        ["하위 1% (상위 99%)", .99]
+      ];
+
+      // 해당 확률에 처음 도달하는 횟수를 찾습니다.
+      // 횟수는 정수 그대로, 세트 수는 올림합니다.
+      const res = qs.map(([label, p, hl]) => {
+        let s = 0;
+        while (s < fine.length - 1 && fine[s] < p) s++;
+
+        return {
+          label,
+          hl,
+          pulls: s,
+          sets: Math.ceil(s / 10)
+        };
+      });
+
+      // 평균은 표시할 때만 반올림합니다.
+      $("planMean").textContent =
+        `약 ${Math.round(mean)}회 (${Math.ceil(Math.round(mean) / 10)}세트)`;
+
+      // qs에서 중앙값은 다섯 번째 항목입니다.
+      // 목록 순서를 바꾸면 아래 인덱스도 함께 확인하세요.
+      $("planMedian").textContent =
+        `${res[4].pulls}회 (${res[4].sets}세트)`;
+
+      $("myProbBox").hidden = tickets === null;
+
+      if (tickets !== null) {
+        $("myProbVal").textContent = formatChance(probability);
+        $("myProbSub").textContent =
+          `보유: ${tickets}회 (${resourceSets(tickets)})`;
+      }
+
+      $("pctTableBody").innerHTML = "";
+
+      for (const r of res) {
+        const tr = document.createElement("tr");
+        if (r.hl) tr.className = "highlight";
+
+        tr.innerHTML =
+          `<td>${r.label}</td>` +
+          `<td><b>${r.pulls}회</b></td>` +
+          `<td>${r.sets}세트</td>`;
+
+        $("pctTableBody").appendChild(tr);
+      }
+
+      return true;
+    }
+
+    // 보유 모집권은 완전한 10연차 수와 남는 단챠 수로 표시합니다.
+    function resourceSets(n) {
+      return `${Math.floor(n / 10)}세트` +
+        (n % 10 ? ` + 단챠 ${n % 10}회` : "");
+    }
+
+    // 아주 작거나 100%에 가까운 성공 확률은 부등호로 구분합니다.
+    function formatChance(p) {
+      const x = clamp(p) * 100;
+
+      return x > 0 && x < .01
+        ? "< 0.01%"
+        : x > 99.99 && x < 100
+          ? "> 99.99%"
+          : x.toFixed(2) + "%";
+    }
+
+    // 현재 입력을 다시 검증하고 결과를 복사합니다.
+    // 자동 복사 API를 사용할 수 없으면 수동 복사를 안내합니다.
+    function copyPlanResult() {
+      if (!calcPlan(true)) return;
+
+      const { kA, kB, f, tickets } = lastPlan;
+      let t = "[엘다인 픽업 견적 결과]\n";
+
+      if (f > 0) {
+        t += `보유 신앙심: ${f} Pt\n`;
+      }
+
+      if (tickets !== null) {
+        t += `보유 모집권: ${tickets}회 (${resourceSets(tickets)})\n`;
+        t += `👉 내 목표 달성 확률: ${$("myProbVal").textContent}\n`;
+      }
+
+      t += `목표: 엘다인 A ${kA}개`;
+      t += kB > 0 ? `, 엘다인 B ${kB}개\n` : "\n";
+      t += "전략: A 완성 후 B, 10연 우선·잔여 모집권은 단챠\n";
+      t += `평균 기댓값(10연): ${$("planMean").textContent}\n`;
+      t += `중앙값: ${$("planMedian").textContent}\n\n`;
+
+      document.querySelectorAll("#pctTableBody tr").forEach((r) => {
+        const d = r.querySelectorAll("td");
+        t += `${d[0].textContent}: ${d[1].textContent} (${d[2].textContent})\n`;
+      });
+
+      if (!navigator.clipboard) {
+        prompt("아래 텍스트를 직접 복사해주세요.", t);
+        return;
+      }
+
+      navigator.clipboard.writeText(t)
+        .then(() => {
+          alert("견적 결과가 클립보드에 복사되었습니다!");
+        })
+        .catch(() => {
+          prompt(
+            "자동 복사에 실패했습니다. 아래 텍스트를 직접 복사해주세요.",
+            t
+          );
+        });
+    }
+
+    /* ==================================================
+       J. 사후 운 평가
+       ================================================== */
+
+    // 작은 확률도 확인할 수 있도록 소수 자릿수와 지수 표기를 조절합니다.
+    function formatPct(x) {
+      return x >= 1
+        ? x.toFixed(2) + "%"
+        : x >= .01
+          ? x.toFixed(3) + "%"
+          : x === 0
+            ? "0%"
+            : x.toExponential(2) + "%";
+    }
+
+    /*
+    운 등급 문구와 기준은 여기서 수정합니다.
+
+    p는 0-100 단위의 '입력 개수 이상을 얻을 확률'입니다.
+    숫자가 작을수록 드문 좋은 결과입니다.
+    평균 근처의 범위는 50% 초과-70% 이하입니다.
+    등급명은 통계적 평균 판정이 아닌 표시 규칙입니다.
+    */
+    function gradeFor(p) {
+      if (p <= 1) return ["초대박", "#c0392b"];
+      if (p <= 5) return ["대박", "#d35400"];
+      if (p <= 20) return ["좋음", "#2c5aa0"];
+      if (p <= 50) return ["평균 이상", "#27ae60"];
+      if (p <= 70) return ["평균 근처", "#6b6558"];
+      return ["평균 이하", "#95a5a6"];
+    }
+
+    // 세 종류의 사후 결과 카드가 공통으로 사용하는 출력 함수입니다.
+    function fillSection(id, n, k, p) {
+      const s = binomSurvival(n, k, p) * 100;
+      const [label, color] = gradeFor(s);
+
+      $("pct" + id).textContent = "상위 " + formatPct(s);
+      $("mean" + id).textContent = (n * p).toFixed(2) + "개";
+      $("exact" + id).textContent =
+        formatPct(binomExact(n, k, p) * 100);
+
+      const badge = $("grade" + id);
+      badge.textContent = label;
+      badge.style.background = color + "22";
+      badge.style.color = color;
+    }
+
+    // 자동 합계에서 수동 입력으로 돌아올 때 이전 값을 복원합니다.
+    let manualTotal = "";
+    let wasAuto = false;
+
+    function calcReview(popup = false) {
+      const auto =
+        $("general").value.trim() !== "" ||
+        $("general").validity.badInput;
+
+      if (auto && !wasAuto) {
+        manualTotal = $("total3").value;
+      }
+
+      if (!auto && wasAuto) {
+        $("total3").value = manualTotal;
+      }
+
+      wasAuto = auto;
+      $("total3").disabled = auto;
+      $("autoNote").hidden = !auto;
+
+      const errors = numericErrors(
+        auto
+          ? ["pulls", "eldine", "general"]
+          : ["pulls", "eldine", "general", "total3"]
+      );
+
+      const n = int("pulls");
+      const e = int("eldine");
+      const g = int("general");
+
+      if (auto) {
+        $("total3").value = errors.length ? "" : String(e + g);
+      }
+
+      const hasTotal = auto || $("total3").value.trim() !== "";
+      const total = auto ? e + g : int("total3");
+
+      // 즉시 교환 가정: 시작 신앙심 0, 교환분 포함 획득 수를 입력합니다.
+      // 교환분은 확률 획득이 아니므로 엘다인과 전체 3성에서 차감합니다.
+      const bonus = $("includeCeil").checked
+        ? Math.floor(n / 300)
+        : 0;
+
+      if (!errors.length) {
+        if (e < bonus) {
+          errors.push([
+            "eldine",
+            `즉시 교환 가정에서는 교환분만 ${bonus}개입니다. 엘다인 획득 수는 ${bonus}개 이상이어야 합니다.`
+          ]);
+        }
+
+        if (e - bonus > n) {
+          errors.push([
+            "eldine",
+            `교환분을 제외한 엘다인 수는 전체 뽑기 ${n}회를 초과할 수 없습니다.`
+          ]);
+        }
+
+        if (g > n) {
+          errors.push([
+            "general",
+            `일반 3성 수는 전체 뽑기 ${n}회를 초과할 수 없습니다.`
+          ]);
+        }
+
+        if (e - bonus >= 0 && e - bonus + g > n) {
+          errors.push([
+            "general",
+            `교환분을 제외한 엘다인과 일반 3성의 합은 전체 뽑기 ${n}회를 초과할 수 없습니다.`
+          ]);
+        }
+
+        if (hasTotal) {
+          if (total < bonus) {
+            errors.push([
+              "total3",
+              `전체 3성 수는 교환분 ${bonus}개보다 적을 수 없습니다.`
+            ]);
+          }
+
+          if (total - bonus > n) {
+            errors.push([
+              "total3",
+              `교환분을 제외한 전체 3성 수는 전체 뽑기 ${n}회를 초과할 수 없습니다.`
+            ]);
+          }
+
+          if (!auto && total < e + g) {
+            errors.push([
+              "total3",
+              "전체 3성 수는 입력한 엘다인과 일반 3성의 합보다 적을 수 없습니다."
+            ]);
+          }
+        }
+      }
+
+      if (showErrors("review", errors, popup)) {
+        $("reviewResultCard").hidden = true;
+        return false;
+      }
+
+      if (n === 0) {
+        $("reviewResultCard").hidden = true;
+        return true;
+      }
+
+      $("reviewResultCard").hidden = false;
+
+      // 사후 평가 확률: 엘다인 P, 일반 3성 0.024, 전체 3성 0.03.
+      fillSection("Eldine", n, e - bonus, P);
+
+      $("secGeneral").hidden = $("general").value.trim() === "";
+      if (!$("secGeneral").hidden) {
+        fillSection("General", n, g, .024);
+      }
+
+      $("secTotal").hidden = !hasTotal;
+      if (hasTotal) {
+        fillSection("Total", n, total - bonus, .03);
+      }
+
+      return true;
+    }
+
+    /* ==================================================
+       K. 이벤트 연결
+       input: 입력 중 즉시 계산
+       change: 입력 확정 시 오류 팝업까지 처리
+       ================================================== */
+
+    for (const id of ["planFaith", "planTickets", "planA", "planB"]) {
+      $(id).addEventListener("input", () => {
+        if (id === "planA" || id === "planB") {
+          setCustom();
+        }
+        calcPlan();
+      });
+
+      $(id).addEventListener("change", () => {
+        calcPlan(true);
+      });
+    }
+
+    for (const id of ["pulls", "eldine", "general", "total3"]) {
+      $(id).addEventListener("input", () => {
+        calcReview();
+      });
+
+      $(id).addEventListener("change", () => {
+        calcReview(true);
+      });
+    }
+
+    $("includeCeil").addEventListener("change", () => {
+      calcReview(true);
+    });
+
+    // 첫 화면에 기본 프리셋의 견적을 표시합니다.
+    calcPlan();
+  </script>
+</body>
+</html>
