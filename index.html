@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="ko">
 <!--
-엘다인 픽업 견적 & 비틱 계산기 — 유지보수 안내
+트릭컬 계산기 — 유지보수 안내
 
 [수정할 부분 찾기]
-A. 디자인 설정       : 색상, 글자 크기, 간격, 모바일/PC 배치
-B. 견적 입력 화면    : 신앙심, 모집권, 목표 개수 입력란
-C. 견적 결과 화면    : 평균, 중앙값, 달성 확률, 달성선 표
-D. 사후 운 검증 화면 : 획득 수 입력란과 결과 카드
+A. 디자인 설정       : 색상, 글자 크기, 간격, 모바일/PC 배치, 상위 메뉴(.tool-nav)
+B. 견적 입력 화면    : (사도 픽업 계산기) 신앙심, 모집권, 목표 개수 입력란
+C. 견적 결과 화면    : (사도 픽업 계산기) 평균, 중앙값, 달성 확률, 달성선 표
+D. 사후 운 검증 화면 : (사도 픽업 계산기) 획득 수 입력란과 결과 카드
 E. 기본값과 프리셋   : 픽업 확률 P, 목표 프리셋 PRESETS
 F. 확률 계산         : binomExact, binomSurvival
 G. 목표 달성 계산    : advancePlan, progressCdf, planDistribution
@@ -33,7 +33,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>엘다인 픽업 견적&amp;비틱 계산기</title>
+  <title>트릭컬 계산기</title>
 
   <style>
     /* ==================================================
@@ -94,9 +94,57 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
     }
 
     h1 {
-      font-size: 1.3rem;
-      margin: 0 0 6px;
+      font-size: 1.35rem;
+      margin: 0 0 10px;
       font-weight: 800;
+      letter-spacing: -.01em;
+    }
+
+    /* 상위 카테고리(도구) 메뉴 */
+    .tool-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 0 0 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tool-btn {
+      padding: 7px 13px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--sub);
+      font-size: .82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+
+    .tool-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .tool-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .tool-view {
+      display: none;
+    }
+
+    .tool-view.active {
+      display: block;
+    }
+
+    .tool-title {
+      font-size: 1.05rem;
+      font-weight: 800;
+      margin: 0 0 4px;
     }
 
     .desc {
@@ -457,22 +505,33 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
 
 <body>
   <div class="wrap">
-    <h1>엘다인 픽업 견적&amp;비틱 계산기</h1>
-    <p class="desc">
-      확률 0.6% / 신앙심 300Pt로 1개 교환 / 10연 우선, 남은 모집권은 단챠
-    </p>
+    <h1>트릭컬 계산기</h1>
 
-    <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('plan')">
-        🎯 목표 견적기
+    <!-- 상위 도구 메뉴: 추후 새 계산기 추가 시 버튼과 .tool-view 섹션을 추가합니다. -->
+    <nav class="tool-nav" id="toolNav" aria-label="계산기 메뉴">
+      <button type="button" class="tool-btn active" data-tool="pickup" onclick="switchTool('pickup')">
+        사도 픽업 계산기
       </button>
-      <button class="tab-btn" onclick="switchTab('review')">
-        📊 사후 운 검증기
-      </button>
-    </div>
+    </nav>
 
-    <!-- B. 견적 입력 화면: 프리셋 버튼은 PRESETS에서 자동 생성합니다. -->
-    <div id="tab-plan" class="tab-content active">
+    <!-- [하위 분류 1] 사도 픽업 계산기 -->
+    <section id="tool-pickup" class="tool-view active" aria-label="사도 픽업 계산기">
+      <h2 class="tool-title">사도 픽업 계산기</h2>
+      <p class="desc">
+        엘다인 픽업 견적 &amp; 비틱 계산기 · 확률 0.6% / 신앙심 300Pt로 1개 교환 / 10연 우선, 남은 모집권은 단챠
+      </p>
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('plan')">
+          🎯 목표 견적기
+        </button>
+        <button class="tab-btn" onclick="switchTab('review')">
+          📊 사후 운 검증기
+        </button>
+      </div>
+
+      <!-- B. 견적 입력 화면: 프리셋 버튼은 PRESETS에서 자동 생성합니다. -->
+      <div id="tab-plan" class="tab-content active">
       <div class="card">
         <label>목표 프리셋</label>
         <div class="preset-grid" id="presetGrid"></div>
@@ -711,6 +770,7 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
         </div>
       </div>
     </div>
+    </section>
 
     <!-- 하단 안내 및 방문자 배지 -->
     <div class="footer">
@@ -777,6 +837,16 @@ K. 이벤트 연결       : 입력 변경 시 실행할 함수
       $("planA").select();
     };
     $("presetGrid").appendChild(custom);
+
+    // 상위 도구(하위 분류) 전환
+    function switchTool(toolId) {
+      document.querySelectorAll(".tool-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.tool === toolId);
+      });
+      document.querySelectorAll(".tool-view").forEach((view) => {
+        view.classList.toggle("active", view.id === "tool-" + toolId);
+      });
+    }
 
     // 탭 버튼 강조와 실제 화면을 함께 전환합니다.
     function switchTab(t) {
