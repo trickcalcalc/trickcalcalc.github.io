@@ -269,6 +269,7 @@ L. 클론 팩토리 계산기 : CF_PRESETS, cloneDistribution, calcClone, copyCl
       border-radius: 14px;
       padding: 16px;
       margin-bottom: 12px;
+      min-width: 0;
     }
 
     label {
@@ -296,7 +297,21 @@ L. 클론 팩토리 계산기 : CF_PRESETS, cloneDistribution, calcClone, copyCl
     }
 
     input[type="date"] {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 42px;
+      line-height: 1.25;
+      text-align: left;
+      -webkit-appearance: none;
+      appearance: none;
       color-scheme: light dark;
+    }
+
+    input[type="date"]::-webkit-date-and-time-value {
+      text-align: left;
+      margin: 0;
     }
 
     input[type="number"]::-webkit-inner-spin-button,
@@ -534,6 +549,8 @@ L. 클론 팩토리 계산기 : CF_PRESETS, cloneDistribution, calcClone, copyCl
       font-size: 1.65rem;
       font-weight: 800;
       color: var(--accent);
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     /* 달성선 표 */
